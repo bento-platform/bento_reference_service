@@ -6,12 +6,15 @@ from pathlib import Path
 from typing import List, Generator
 
 from .config import config
+from .es import es
 from .logger import logger
 from .models import Alias, Contig, Genome
 from .utils import make_uri
 
 __all__ = [
     "ingest_genome",
+    "ingest_gene_feature_annotation",
+    "get_genome",
     "get_genomes",
 ]
 
@@ -45,64 +48,68 @@ async def ingest_gene_feature_annotation(genome_id: str, gtf_annotation_path: Pa
     pass
 
 
+class GenomeFormatError(Exception):
+    pass
+
+
+async def get_genome(genome: Path) -> Genome:
+    if not genome.is_dir():
+        raise GenomeFormatError(f"not a directory")
+
+    metadata_path = (genome / "metadata.json").resolve().absolute()
+    sequence_path = (genome / "sequence.fa").resolve().absolute()
+    sequence_index_path = (genome / "sequence.fa.fai").resolve().absolute()
+
+    # Raise errors with genomes which are missing one of the above required files
+    for required_file in (metadata_path, sequence_path, sequence_index_path):
+        if not required_file.exists():
+            raise GenomeFormatError(f"missing required file {required_file}")
+
+        elif required_file.is_dir():
+            raise GenomeFormatError(f"{required_file} should not be a directory")
+
+    async with aiofiles.open(metadata_path, "r") as mf:
+        genome_metadata = json.loads(await mf.read())
+
+    id_ = genome_metadata["id"]
+    correct_name = f"{id_}.bentoGenome"
+
+    # Error on genomes where the directory name != the ID specified in metadata.json, plus .bentoGenome as a suffix
+    if genome.name != correct_name:
+        raise GenomeFormatError(f"mismatch between directory name ({genome}) and ID-derived name ({correct_name})")
+
+    # Extract contigs from the FASTA file, and tag them with the checksums provided in the metadata JSON
+    fa = pysam.FastaFile(str(sequence_path), filepath_index=str(sequence_index_path))
+    contigs: List[Contig] = []
+    try:
+        for contig in fa.references:
+            gm_contig = genome_metadata["contigs"][contig]
+            contig_aliases: List[Alias] = [Alias(**ca) for ca in gm_contig.get("aliases", [])]
+            contigs.append(Contig(
+                name=contig,
+                aliases=contig_aliases,
+                md5=genome_metadata["contigs"][contig]["md5"],
+                trunc512=genome_metadata["contigs"][contig]["trunc512"],
+            ))
+    finally:
+        fa.close()
+
+    return Genome(
+        id=id_,
+        aliases=[Alias(**alias) for alias in genome_metadata.get("aliases", [])],
+        uri=make_uri(f"/genomes/{id_}"),
+        contigs=contigs,
+        md5=genome_metadata["md5"],
+        trunc512=genome_metadata["trunc512"],
+        fasta=sequence_path,
+        fai=sequence_index_path,
+    )
+
+
 async def get_genomes() -> Generator[Genome, None, None]:
     for genome in config.data_path.glob("*.bentoGenome"):
-        if not genome.is_dir():
-            logger.error(f"Skipping {genome}: not a directory")
-            continue
-
-        metadata_path = (genome / "metadata.json").resolve().absolute()
-        sequence_path = (genome / "sequence.fa").resolve().absolute()
-        sequence_index_path = (genome / "sequence.fa.fai").resolve().absolute()
-
-        # Skip any genomes which are missing one of the above required files
-        skip_genome: bool = False
-        for required_file in (metadata_path, sequence_path, sequence_index_path):
-            if not required_file.exists():
-                logger.error(f"Skipping {genome}: missing required file {required_file}")
-                skip_genome = True
-
-            elif required_file.is_dir():
-                logger.error(f"Skipping {genome}: {required_file} should not be a directory")
-                skip_genome = True
-
-        if skip_genome:
-            continue
-
-        async with aiofiles.open(metadata_path, "r") as mf:
-            genome_metadata = json.loads(await mf.read())
-
-        id_ = genome_metadata["id"]
-        correct_name = f"{id_}.bentoGenome"
-
-        # Skip genomes where the directory name != the ID specified in metadata.json, plus .bentoGenome as a suffix
-        if genome.name != correct_name:
-            logger.error(f"Skipping {genome}: mismatch between directory name and ID-derived name ({correct_name})")
-            continue
-
-        # Extract contigs from the FASTA file, and tag them with the checksums provided in the metadata JSON
-        fa = pysam.FastaFile(str(sequence_path), filepath_index=str(sequence_index_path))
-        contigs: List[Contig] = []
         try:
-            for contig in fa.references:
-                gm_contig = genome_metadata["contigs"][contig]
-                contig_aliases: List[Alias] = [Alias(**ca) for ca in gm_contig.get("aliases", [])]
-                contigs.append(Contig(
-                    name=contig,
-                    aliases=contig_aliases,
-                    md5=genome_metadata["contigs"][contig]["md5"],
-                    trunc512=genome_metadata["contigs"][contig]["trunc512"],
-                ))
-        finally:
-            fa.close()
-
-        yield Genome(
-            id=id_,
-            aliases=[Alias(**alias) for alias in genome_metadata.get("aliases", [])],
-            uri=make_uri(f"/genomes/{id_}"),
-            contigs=contigs,
-            md5=genome_metadata["md5"],
-            trunc512=genome_metadata["trunc512"],
-            fasta=sequence_path,
-            fai=sequence_index_path,
-        )
+            yield await get_genome(genome)
+        except GenomeFormatError as e:
+            logger.error(f"Skipping {genome}: {e}")
+            continue

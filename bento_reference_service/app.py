@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 from typing import List
 
@@ -10,6 +10,9 @@ from .genomes import get_genome, get_genomes
 from .utils import make_uri
 
 app = FastAPI()
+
+REFGET_HEADER_TEXT = "text/vnd.ga4gh.refget.v1.0.1+plain"
+REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
 
 
 @app.on_event("startup")
@@ -55,6 +58,13 @@ def genome_to_response(g: models.Genome) -> dict:
     }
 
 
+def contig_to_response(c: models.Contig) -> dict:
+    return {
+        **c.dict(),
+        "refget": make_uri(f"/sequences/{c.trunc512}"),
+    }
+
+
 @app.get("/genomes")
 async def genomes_list() -> List[dict]:
     return [genome_to_response(g) async for g in get_genomes()]
@@ -92,3 +102,49 @@ async def genomes_detail_contigs(genome_id: str):
 @app.get("/genomes/{genome_id}/contigs/{contig_name}")
 async def genomes_detail_contig_detail(genome_id: str, contig_name: str):
     pass
+
+
+# RefGet
+
+@app.get("/sequence/{sequence_checksum}")
+async def refget_sequence(response: Response, sequence_checksum: str):
+    response.headers["Content-Type"] = REFGET_HEADER_TEXT
+
+    # TODO: start
+    # TODO: end
+
+    # TODO: Range
+    # TODO: Not Acceptable response to non-text plain (with fallbacks) request
+
+    pass
+
+
+@app.get("/sequence/{sequence_checksum}/metadata")
+async def refget_sequence_metadata(response: Response, sequence_checksum: str) -> dict:
+    response.headers["Content-Type"] = REFGET_HEADER_JSON
+
+    # TODO: get contig - maybe we need to index them...
+
+    return {
+        "metadata": {
+            # TODO
+            "md5": "TODO",
+            "trunc512": "TODO",
+            "length": "TODO",
+            "aliases": [],  # TODO
+        },
+    }
+
+
+@app.get("/sequence/service-info")
+async def refget_service_info(response: Response) -> dict:
+    response.headers["Content-Type"] = REFGET_HEADER_JSON
+
+    return {
+        "service": {
+            "circular_supported": False,
+            "algorithms": ["md5", "trunc512"],
+            "subsequence_limit": 10000,  # TODO
+            "supported_api_versions": ["1.0"],
+        }
+    }

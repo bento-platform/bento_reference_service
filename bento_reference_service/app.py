@@ -1,10 +1,29 @@
 from fastapi import FastAPI
 
-from . import __version__
+from typing import List
+
+from . import __version__, indices
 from .config import config
 from .constants import BENTO_SERVICE_KIND, SERVICE_TYPE
+from .es import es
+from .genomes import get_genomes
+from .utils import make_uri
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def app_startup() -> None:
+    # Create ES indices based on service ID if needed
+
+    if not await es.indices.exists(index=indices.gene_feature_index_name):
+        await es.indices.create(index=indices.gene_feature_index_name, mappings=indices.gene_feature_mappings)
+
+
+@app.on_event("shutdown")
+async def app_shutdown() -> None:
+    # Don't 'leak' ES connection - close it when the app process is closed
+    await es.close()
 
 
 @app.get("/service-info")
@@ -29,8 +48,15 @@ async def service_info():
 
 
 @app.get("/genomes")
-async def genomes_list():
-    pass
+async def genomes_list() -> List[dict]:
+    return [
+        {
+            **g.dict(exclude={"fasta", "fai"}),
+            "fasta": make_uri(f"/genomes/{g.id}.fa"),
+            "fai": make_uri(f"/genomes/{g.id}.fa.fai"),
+        }
+        async for g in get_genomes()
+    ]
 
 
 @app.get("/genomes/{genome_id}.fa")

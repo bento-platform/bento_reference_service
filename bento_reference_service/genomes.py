@@ -3,11 +3,12 @@ import json
 import pysam
 
 from pathlib import Path
-from typing import List
+from typing import List, Generator
 
 from .config import config
 from .logger import logger
 from .models import Alias, Contig, Genome
+from .utils import make_uri
 
 __all__ = [
     "ingest_genome",
@@ -30,10 +31,11 @@ async def ingest_genome(genome_id: str, bento_genome_path: Path) -> None:
     pass
 
 
-async def ingest_gtf_annotation(genome_id: str, gtf_annotation_path: Path) -> None:
+async def ingest_gene_feature_annotation(genome_id: str, gtf_annotation_path: Path) -> None:
     """
-    Given a genome ID and a path to an external GTF annotation file, this function copies the GTF into the relevant
-    .bentoGenome directory and ingests the annotations into an ElasticSearch index for fuzzy text querying of features.
+    Given a genome ID and a path to an external GTF gene/exon/transcript annotation file, this function copies the GTF
+    into the relevant .bentoGenome directory and ingests the annotations into an ElasticSearch index for fuzzy text
+    querying of features.
     :param genome_id: The ID of the genome to attach the annotation to.
     :param gtf_annotation_path: The path to an external GTF-formatted annotation file to copy and read from.
     :return: None
@@ -43,9 +45,7 @@ async def ingest_gtf_annotation(genome_id: str, gtf_annotation_path: Path) -> No
     pass
 
 
-async def get_genomes() -> List[Genome]:
-    genomes: List[Genome] = []
-
+async def get_genomes() -> Generator[Genome, None, None]:
     for genome in config.data_path.glob("*.bentoGenome"):
         if not genome.is_dir():
             logger.error(f"Skipping {genome}: not a directory")
@@ -55,6 +55,7 @@ async def get_genomes() -> List[Genome]:
         sequence_path = (genome / "sequence.fa").resolve().absolute()
         sequence_index_path = (genome / "sequence.fa.fai").resolve().absolute()
 
+        # Skip any genomes which are missing one of the above required files
         skip_genome: bool = False
         for required_file in (metadata_path, sequence_path, sequence_index_path):
             if not required_file.exists():
@@ -71,6 +72,15 @@ async def get_genomes() -> List[Genome]:
         async with aiofiles.open(metadata_path, "r") as mf:
             genome_metadata = json.loads(await mf.read())
 
+        id_ = genome_metadata["id"]
+        correct_name = f"{id_}.bentoGenome"
+
+        # Skip genomes where the directory name != the ID specified in metadata.json, plus .bentoGenome as a suffix
+        if genome.name != correct_name:
+            logger.error(f"Skipping {genome}: mismatch between directory name and ID-derived name ({correct_name})")
+            continue
+
+        # Extract contigs from the FASTA file, and tag them with the checksums provided in the metadata JSON
         fa = pysam.FastaFile(str(sequence_path), filepath_index=str(sequence_index_path))
         contigs: List[Contig] = []
         try:
@@ -86,14 +96,13 @@ async def get_genomes() -> List[Genome]:
         finally:
             fa.close()
 
-        genomes.append(Genome(
-            id=genome_metadata["id"],
+        yield Genome(
+            id=id_,
             aliases=[Alias(**alias) for alias in genome_metadata.get("aliases", [])],
+            uri=make_uri(f"/genomes/{id_}"),
             contigs=contigs,
             md5=genome_metadata["md5"],
             trunc512=genome_metadata["trunc512"],
             fasta=sequence_path,
             fai=sequence_index_path,
-        ))
-
-    return genomes
+        )

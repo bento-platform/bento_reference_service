@@ -39,6 +39,7 @@ class Contig(BaseModel):
 class Genome(BaseModel):
     id: str
     aliases: List[Alias]
+    uri: str
 
     # checksums for FASTA
     md5: str

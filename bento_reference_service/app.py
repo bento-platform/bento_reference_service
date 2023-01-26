@@ -6,7 +6,7 @@ from . import __version__, indices, models
 from .config import config
 from .constants import BENTO_SERVICE_KIND, SERVICE_TYPE
 from .es import es
-from .genomes import get_genome, get_genomes
+from .genomes import make_genome_path, get_genome, get_genomes
 from .utils import make_uri
 
 app = FastAPI()
@@ -50,18 +50,23 @@ async def service_info():
     }
 
 
-def genome_to_response(g: models.Genome) -> dict:
-    return {
-        **g.dict(exclude={"fasta", "fai"}),
-        "fasta": make_uri(f"/genomes/{g.id}.fa"),
-        "fai": make_uri(f"/genomes/{g.id}.fa.fai"),
-    }
-
-
 def contig_to_response(c: models.Contig) -> dict:
     return {
         **c.dict(),
         "refget": make_uri(f"/sequences/{c.trunc512}"),
+    }
+
+
+def genome_contigs_response(g: models.Genome) -> List[dict]:
+    return [contig_to_response(c) for c in g.contigs]
+
+
+def genome_to_response(g: models.Genome) -> dict:
+    return {
+        **g.dict(exclude={"fasta", "fai"}),
+        "contigs": genome_contigs_response(g),
+        "fasta": make_uri(f"/genomes/{g.id}.fa"),
+        "fai": make_uri(f"/genomes/{g.id}.fa.fai"),
     }
 
 
@@ -86,17 +91,14 @@ async def genomes_detail_fasta_index(genome_id: str):
 
 @app.get("/genomes/{genome_id}")
 async def genomes_detail(genome_id: str):
-    genome_path = config.data_path / f"{genome_id}.bentoGenome"
-
-    # Make sure the genome path is correctly nested inside the data directory
-    # TODO
-
+    genome_path = make_genome_path(genome_id)
     return genome_to_response(await get_genome(genome_path))
 
 
 @app.get("/genomes/{genome_id}/contigs")
 async def genomes_detail_contigs(genome_id: str):
-    pass
+    genome_path = make_genome_path(genome_id)
+    return genome_contigs_response(await get_genome(genome_path))
 
 
 @app.get("/genomes/{genome_id}/contigs/{contig_name}")
@@ -108,15 +110,17 @@ async def genomes_detail_contig_detail(genome_id: str, contig_name: str):
 
 @app.get("/sequence/{sequence_checksum}")
 async def refget_sequence(response: Response, sequence_checksum: str):
-    response.headers["Content-Type"] = REFGET_HEADER_TEXT
-
-    # TODO: start
-    # TODO: end
+    # TODO: start - query arg
+    # TODO: end - query arg
 
     # TODO: Range
+
+    # TODO: Validate max length - subsequence_limit
+
     # TODO: Not Acceptable response to non-text plain (with fallbacks) request
 
-    pass
+    response.headers["Content-Type"] = REFGET_HEADER_TEXT
+    # TODO: generate chunks in response
 
 
 @app.get("/sequence/{sequence_checksum}/metadata")

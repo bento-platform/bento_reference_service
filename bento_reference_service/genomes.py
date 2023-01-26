@@ -1,9 +1,12 @@
 import aiofiles
+import asyncio
+import gffutils
 import json
 import pysam
+import re
 
 from pathlib import Path
-from typing import List, Generator
+from typing import List, Generator, Tuple
 
 from .config import config
 from .es import es
@@ -12,6 +15,7 @@ from .models import Alias, Contig, Genome
 from .utils import make_uri
 
 __all__ = [
+    "make_genome_path",
     "ingest_genome",
     "ingest_gene_feature_annotation",
     "get_genome",
@@ -19,19 +23,81 @@ __all__ = [
 ]
 
 
-async def ingest_genome(genome_id: str, bento_genome_path: Path) -> None:
+VALID_GENOME_ID = re.compile(r"^[a-zA-Z0-9\-_.]{3,50}$")
+
+
+class GenomeFormatError(Exception):
+    pass
+
+
+def make_genome_dir_name(id_: str) -> str:
+    return f"{id_}.bentoGenome"
+
+
+def make_genome_path(id_: str) -> Path:
+    return (config.data_path / make_genome_dir_name(id_)).absolute().resolve()
+
+
+def get_genome_paths(genome: Path) -> Tuple[Path, Path, Path]:
+    return (
+        (genome / "metadata.json").resolve().absolute(),
+        (genome / "sequence.fa").resolve().absolute(),
+        (genome / "sequence.fa.fai").resolve().absolute(),
+    )
+
+
+def check_genome_file_existence(required_files: Tuple[Path, ...]) -> None:
+    # Raise errors with genomes which are missing one of the above required files
+    for required_file in required_files:
+        if not required_file.exists():
+            raise GenomeFormatError(f"missing required file {required_file}")
+
+        elif required_file.is_dir():
+            raise GenomeFormatError(f"{required_file} should not be a directory")
+
+
+async def ingest_genome(bento_genome_path: Path) -> None:
     """
     Given an external directory following the ".bentoGenome" directory specification, this function validates the format
     and copies the directory into the local data folder.
-    :param genome_id: The ID of the genome; the .bentoGenome will be renamed to <genome_id>.bentoGenome.
     :param bento_genome_path: The path to the .bentoGenome directory.
     :return: None
     """
 
-    # TODO: ingest genome & write path
-    # TODO: QC checks
+    # TODO: more QC checks
+    # TODO: index genome & contigs
 
-    pass
+    if not bento_genome_path.is_dir():
+        raise GenomeFormatError(f"{bento_genome_path} is not a directory")
+
+    genome_paths = get_genome_paths(bento_genome_path)
+
+    # Check required file existence
+    check_genome_file_existence(genome_paths)
+
+    metadata_path, sequence_path, sequence_index_path = genome_paths
+
+    # Read ID from metadata.json
+    async with aiofiles.open(metadata_path, "r") as mf:
+        genome_metadata = json.loads(await mf.read())
+    id_ = genome_metadata["id"]
+
+    # Check if the genome ID is valid - ensures no funky file names
+    if not VALID_GENOME_ID.match(id_):
+        raise GenomeFormatError(f"invalid genome ID: {id_} (must match /{VALID_GENOME_ID.pattern}/)")
+
+    dest_path = make_genome_path(id_)
+
+    copy_proc = await asyncio.create_subprocess_exec(
+        "cp",
+        str(bento_genome_path.absolute().resolve()),
+        str(dest_path),
+    )
+
+    stdout, stderr = await copy_proc.communicate()
+
+    if (rc := copy_proc.returncode) != 0:
+        raise GenomeFormatError(f"on copy, got non-0 return code {rc} (stdout={stdout}, stderr={stderr})")
 
 
 async def ingest_gene_feature_annotation(genome_id: str, gtf_annotation_path: Path) -> None:
@@ -48,31 +114,25 @@ async def ingest_gene_feature_annotation(genome_id: str, gtf_annotation_path: Pa
     pass
 
 
-class GenomeFormatError(Exception):
-    pass
-
-
 async def get_genome(genome: Path) -> Genome:
     if not genome.is_dir():
-        raise GenomeFormatError(f"not a directory")
+        raise GenomeFormatError("not a directory")
 
-    metadata_path = (genome / "metadata.json").resolve().absolute()
-    sequence_path = (genome / "sequence.fa").resolve().absolute()
-    sequence_index_path = (genome / "sequence.fa.fai").resolve().absolute()
+    if not genome.parent.absolute().resolve() == config.data_path.absolute().resolve():
+        raise GenomeFormatError("invalid location")
 
-    # Raise errors with genomes which are missing one of the above required files
-    for required_file in (metadata_path, sequence_path, sequence_index_path):
-        if not required_file.exists():
-            raise GenomeFormatError(f"missing required file {required_file}")
+    genome_paths = get_genome_paths(genome)
 
-        elif required_file.is_dir():
-            raise GenomeFormatError(f"{required_file} should not be a directory")
+    # Raise errors with genomes which are missing a required file
+    check_genome_file_existence(genome_paths)
+
+    metadata_path, sequence_path, sequence_index_path = genome_paths
 
     async with aiofiles.open(metadata_path, "r") as mf:
         genome_metadata = json.loads(await mf.read())
 
     id_ = genome_metadata["id"]
-    correct_name = f"{id_}.bentoGenome"
+    correct_name = make_genome_dir_name(id_)
 
     # Error on genomes where the directory name != the ID specified in metadata.json, plus .bentoGenome as a suffix
     if genome.name != correct_name:

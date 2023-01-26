@@ -14,5 +14,7 @@ class Config(BaseSettings):
     data_path: Path = Path(__file__).parent / "data"
     service_url_base_path: str = "http://127.0.0.1:5000"  # Base path to construct URIs from
 
+    elasticsearch_url: str = "http://localhost:9200"  # Connection URL for Elasticsearch
+
 
 config = Config()

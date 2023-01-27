@@ -148,7 +148,11 @@ async def refget_service_info(response: Response) -> dict:
         "service": {
             "circular_supported": False,
             "algorithms": ["md5", "trunc512"],
-            "subsequence_limit": 10000,  # TODO
+
+            # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
+            # It's a substring!
+            "subsequence_limit": config.response_substring_limit,
+
             "supported_api_versions": ["1.0"],
         }
     }

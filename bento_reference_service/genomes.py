@@ -5,6 +5,7 @@ import jsonschema
 import pysam
 import re
 
+from elasticsearch.helpers import async_streaming_bulk
 from pathlib import Path
 from typing import Dict, List, Generator, Optional, Tuple
 
@@ -29,6 +30,10 @@ VALID_GENOME_ID = re.compile(r"^[a-zA-Z0-9\-_.]{3,50}$")
 
 
 class GenomeFormatError(Exception):
+    pass
+
+
+class AnnotationIngestError(Exception):
     pass
 
 
@@ -128,93 +133,85 @@ async def ingest_gene_feature_annotation(
 
     genome: Genome = await get_genome(make_genome_path(genome_id))
 
-    batch_size = 500
     log_progress_interval = 1000
 
-    def _ingest_batch(batch_: List[Dict[str, str]]):
-        pass
+    async def _iter_features():
+        gtf = pysam.TabixFile(str(gtf_annotation_path), index=str(gtf_annotation_index_path))
+        total_processed: int = 0
+        try:
+            for contig in genome.contigs:
+                logger.info(f"Indexing features from contig {contig.name}")
 
-    gtf = pysam.TabixFile(str(gtf_annotation_path), index=str(gtf_annotation_index_path))
-    total_processed: int = 0
-    try:
-        for contig in genome.contigs:
-            logger.info(f"Indexing features from contig {contig.name}")
+                for record in gtf.fetch(contig.name, parser=pysam.asGTF()):
+                    feature_type = record.feature
+                    gene_id = record.gene_id
+                    gene_name = record.attributes.get("gene_name", gene_id)
 
-            batch: List[Dict[str, str]] = []
+                    feature_id: Optional[str] = None
+                    feature_name: Optional[str] = None
 
-            for record in gtf.fetch(contig.name, parser=pysam.asGTF()):
-                feature_type = record.feature
-                gene_id = record.gene_id
-                gene_name = record.attributes.get("gene_name", gene_id)
-
-                feature_id: Optional[str] = None
-                feature_name: Optional[str] = None
-
-                if feature_type == "gene":
-                    feature_id = gene_id
-                    feature_name = gene_name
-                elif feature_type == "transcript":
-                    feature_id = record.transcript_id
-                    feature_name = feature_id  # Explicitly re-use ID as name here
-                elif feature_type in ("5UTR", "five_prime_utr"):  # 5' untranslated region (UTR)
-                    feature_id = f"{gene_id}-5UTR"
-                    feature_name = f"{gene_name} 5' UTR"
-                elif feature_type in ("3UTR", "five_prime_utr"):  # 3' untranslated region (UTR)
-                    feature_id = f"{gene_id}-3UTR"
-                    feature_name = f"{gene_name} 3' UTR"
-                elif feature_type == "start_codon":  # TODO: multiple start codons may exist?
-                    feature_id = f"{gene_id}-start_codon"
-                    feature_name = f"{gene_name} start codon"
-                elif feature_type == "stop_codon":  # TODO: multiple stop codons may exist?
-                    feature_id = f"{gene_id}-stop_codon"
-                    feature_name = f"{gene_name} stop codon"
-                elif feature_type == "exon":
-                    feature_id = record.attributes["exon_id"]  # TODO: fallback with gene ID + exon number?
-                    if "exon_number" in record.attributes:
-                        # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
-                        feature_name = f"{gene_name} exon {record.attributes['exon_number']}"
-                    else:
+                    if feature_type == "gene":
+                        feature_id = gene_id
+                        feature_name = gene_name
+                    elif feature_type == "transcript":
+                        feature_id = record.transcript_id
                         feature_name = feature_id  # Explicitly re-use ID as name here
-                elif feature_type == "CDS":  # coding sequence
-                    exon_id = record.attributes["exon_id"]
-                    feature_id = f"{exon_id}-CDS"
-                    if "exon_number" in record.attributes:
-                        # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
-                        feature_name = f"{gene_name} exon {record.attributes['exon_number']} CDS"
-                    else:
-                        feature_name = f"{exon_id} CDS"  # Explicitly re-use ID as name here
+                    elif feature_type in ("5UTR", "five_prime_utr"):  # 5' untranslated region (UTR)
+                        feature_id = f"{gene_id}-5UTR"
+                        feature_name = f"{gene_name} 5' UTR"
+                    elif feature_type in ("3UTR", "five_prime_utr"):  # 3' untranslated region (UTR)
+                        feature_id = f"{gene_id}-3UTR"
+                        feature_name = f"{gene_name} 3' UTR"
+                    elif feature_type == "start_codon":  # TODO: multiple start codons may exist?
+                        feature_id = f"{gene_id}-start_codon"
+                        feature_name = f"{gene_name} start codon"
+                    elif feature_type == "stop_codon":  # TODO: multiple stop codons may exist?
+                        feature_id = f"{gene_id}-stop_codon"
+                        feature_name = f"{gene_name} stop codon"
+                    elif feature_type == "exon":
+                        feature_id = record.attributes["exon_id"]  # TODO: fallback with gene ID + exon number?
+                        if "exon_number" in record.attributes:
+                            # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
+                            feature_name = f"{gene_name} exon {record.attributes['exon_number']}"
+                        else:
+                            feature_name = feature_id  # Explicitly re-use ID as name here
+                    elif feature_type == "CDS":  # coding sequence
+                        exon_id = record.attributes["exon_id"]
+                        feature_id = f"{exon_id}-CDS"
+                        if "exon_number" in record.attributes:
+                            # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
+                            feature_name = f"{gene_name} exon {record.attributes['exon_number']} CDS"
+                        else:
+                            feature_name = f"{exon_id} CDS"  # Explicitly re-use ID as name here
 
-                if feature_id is None:
-                    logger.warn(f"Skipping unsupported feature (type={feature_type}, no ID retrieval): {record}")
-                    continue
+                    if feature_id is None:
+                        logger.warn(f"Skipping unsupported feature (type={feature_type}, no ID retrieval): {record}")
+                        continue
 
-                if feature_name is None:
-                    logger.warn(f"Using ID as name for feature: {record}")
-                    feature_name = feature_id
+                    if feature_name is None:
+                        logger.warn(f"Using ID as name for feature: {record}")
+                        feature_name = feature_id
 
-                batch.append({
-                    "id": feature_id,
-                    "name": feature_name,
-                    "position": f"{contig.name}:{record.start}-{record.end}",
-                    "type": record["feature"],
-                    "genome": genome_id,
-                    "strand": record["strand"],
-                })
+                    yield {
+                        "id": feature_id,
+                        "name": feature_name,
+                        "position": f"{contig.name}:{record.start}-{record.end}",
+                        "type": record["feature"],
+                        "genome": genome_id,
+                        "strand": record["strand"],
+                    }
 
-                # Ingest batches of features every once in a while
-                if len(batch) >= batch_size:
-                    _ingest_batch(batch)
-                    batch.clear()
+                total_processed += 1
+                if total_processed % log_progress_interval == 0:
+                    logger.info(f"Processed {total_processed} features")
 
-            if batch:
-                _ingest_batch(batch)
+        finally:
+            gtf.close()
 
-            total_processed += 1
-            if total_processed % log_progress_interval == 0:
-                logger.info(f"Processed {total_processed} features")
-
-    finally:
-        gtf.close()
+    async for ok, result in async_streaming_bulk(es, _iter_features()):
+        if not ok:
+            action, result = result.popitem()
+            raise AnnotationIngestError(f"failed to {action} document: {result}")
 
 
 def _genome_metadata_contig_to_pydantic_object(gm_contig: dict) -> Contig:

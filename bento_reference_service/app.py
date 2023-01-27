@@ -1,7 +1,9 @@
+import aiofiles
+import math
 import re
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from typing import List, Optional
 
@@ -18,6 +20,10 @@ REFGET_HEADER_TEXT = "text/vnd.ga4gh.refget.v1.0.1+plain"
 REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
 
 RANGE_HEADER_PATTERN = re.compile(r"^bytes=(\d+)-(\d+)?$")
+
+EXC_BAD_RANGE = HTTPException(status_code=400, detail=f"invalid range header value: {range_header}")
+
+CHUNK_SIZE = 1024 * 16  # 16 KB at a time
 
 
 @app.on_event("startup")
@@ -115,14 +121,48 @@ async def genomes_detail_fasta(genome_id: str, request: Request):
         # TODO: send the file if no range header and the FASTA is below some response size limit
         return
 
-    # TODO: read FASTA at bytes specified
-    pass
+    range_header_match = RANGE_HEADER_PATTERN.match(range_header)
+    if not range_header_match:
+        raise EXC_BAD_RANGE
+
+    start: int = 0
+    end: Optional[int] = None
+
+    try:
+        start = int(range_header_match.group(1))
+        end_val = range_header_match.group(2)
+        end = end_val if end_val is None else int(end_val)
+    except ValueError:
+        raise EXC_BAD_RANGE
+
+    async def stream_file():
+        # TODO: Use range support from FastAPI when it is merged
+        async with aiofiles.open(genome.fasta, "rb") as ff:
+            # Logic mostly ported from bento_drs
+
+            # First, skip over <start> bytes to get to the beginning of the range
+            ff.seek(start)
+
+            byte_offset: int = start
+            while True:
+                # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
+                data = ff.read(min(CHUNK_SIZE, (end + 1 - byte_offset) if end is not None else CHUNK_SIZE))
+                byte_offset += len(data)
+                yield data
+
+                # If we've hit the end of the file and are reading empty byte strings, or we've reached the
+                # end of our range (inclusive), then escape the loop.
+                # This is guaranteed to terminate with a finite-sized file.
+                if not data or (end is not None and byte_offset > end):
+                    break
+
+    return StreamingResponse(stream_file(), media_type="text/x-fasta", status_code=206 if range_header else 200)
 
 
 @app.get("/genomes/{genome_id}.fa.fai")
 async def genomes_detail_fasta_index(genome_id: str):
     genome: models.Genome = await get_genome_or_error(genome_id)
-    return FileResponse(genome.fai)
+    return FileResponse(genome.fai, filename=f"{genome_id}.fa.fai")
 
 
 @app.get("/genomes/{genome_id}")

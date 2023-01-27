@@ -33,6 +33,8 @@ genome_index = BentoESIndex(
     mappings={  # TODO: generate from models automatically or something
         "id": {"type": "keyword"},
         "aliases": _alias_type,
+        "md5": {"type": "text"},
+        "trunc512": {"type": "text"},
         "contigs": {
             "type": "nested",
             "properties": {
@@ -42,6 +44,8 @@ genome_index = BentoESIndex(
                 "trunc512": {"type": "text"},
             },
         },
+        "fasta": {"type": "text"},
+        "fai": {"type": "text"},
     },
 )
 

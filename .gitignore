@@ -4,3 +4,5 @@ env
 
 data/*
 !data/.gitkeep
+
+es_data

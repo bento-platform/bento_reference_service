@@ -160,16 +160,40 @@ async def genomes_detail_gene_features_index(genome_id: str):
 
 # RefGet
 
+async def get_contig_by_checksum(checksum: str) -> Optional[models.Contig]:
+    es_resp = await es.search(index=indices.genome_index["name"], query={
+
+    })
+    if es_resp["hits"]["total"]["value"] > 0:
+        # Use ES result, since we got a hit
+        sc = es_resp["hits"]["hits"][0]
+        return models.Contig(**sc)
+
+    # Manually iterate
+    async for genome in get_genomes():
+        for sc in genome.contigs:
+            if sc.md5 == checksum or sc.trunc512 == checksum:
+                return sc
+
+    return None
+
+
 @app.get("/sequence/{sequence_checksum}")
 async def refget_sequence(response: Response, sequence_checksum: str):
-    # TODO: query based on index (exact OR with checksums); fall back to iteration if needed
+    contig: Optional[models.Contig] = await get_contig_by_checksum(sequence_checksum)
 
-    # TODO: start - query arg
-    # TODO: end - query arg
+    if contig is None:
+        # TODO: proper 404 for refget spec
+        raise HTTPException(status_code=404, detail=f"sequence not found with checksum: {sequence_checksum}")
 
-    # TODO: Range
+    genome = await get_genome_or_error(contig.genome)
 
-    # TODO: Validate max length - subsequence_limit
+    # TODO: start - query arg (optional)
+    # TODO: end - query arg (optional)
+
+    # TODO: Range - which first?
+
+    # TODO: Validate max length - subsequence_limit (if not set, check length of whole contig)
 
     # TODO: Not Acceptable response to non-text plain (with fallbacks) request
 
@@ -178,18 +202,20 @@ async def refget_sequence(response: Response, sequence_checksum: str):
 
 
 @app.get("/sequence/{sequence_checksum}/metadata")
-async def refget_sequence_metadata(response: Response, sequence_checksum: str) -> dict:
+async def refget_sequence_metadata(response: Response, sequence_checksum: str) -> dict:  # TODO: type: refget resp
+    contig: Optional[models.Contig] = await get_contig_by_checksum(sequence_checksum)
+
+    if contig is None:
+        # TODO: proper 404 for refget spec
+        raise HTTPException(status_code=404, detail=f"sequence not found with checksum: {sequence_checksum}")
+
     response.headers["Content-Type"] = REFGET_HEADER_JSON
-
-    # TODO: query based on index (exact OR with checksums); fall back to iteration if needed
-
     return {
         "metadata": {
-            # TODO
-            "md5": "TODO",
-            "trunc512": "TODO",
-            "length": "TODO",
-            "aliases": [],  # TODO
+            "md5": contig.md5,
+            "trunc512": contig.trunc512,
+            "length": contig.length,
+            "aliases": [a.dict() for a in contig.aliases],
         },
     }
 
@@ -197,7 +223,6 @@ async def refget_sequence_metadata(response: Response, sequence_checksum: str) -
 @app.get("/sequence/service-info")
 async def refget_service_info(response: Response) -> dict:
     response.headers["Content-Type"] = REFGET_HEADER_JSON
-
     return {
         "service": {
             "circular_supported": False,

@@ -214,14 +214,16 @@ async def ingest_gene_feature_annotation(
             raise AnnotationIngestError(f"failed to {action} document: {result}")
 
 
-def _genome_metadata_contig_to_pydantic_object(gm_contig: dict) -> Contig:
+def _genome_metadata_contig_to_pydantic_object(genome: str, gm_contig: dict) -> Contig:
     # TODO: Build a super-model class with pydantic/JSON schema representations/converters
     contig_aliases: List[Alias] = [Alias(**ca) for ca in gm_contig.get("aliases", [])]
     return Contig(
+        genome=genome,
         name=gm_contig["name"],
         aliases=contig_aliases,
         md5=gm_contig["md5"],
         trunc512=gm_contig["trunc512"],
+        length=gm_contig["length"],
     )
 
 
@@ -254,7 +256,7 @@ async def get_genome(genome: Path) -> Genome:
     try:
         gm_contigs_by_name: Dict[str, dict] = {gmc["name"]: gmc for gmc in genome_metadata["contigs"]}
         contigs: List[Contig] = [
-            _genome_metadata_contig_to_pydantic_object(gm_contigs_by_name[contig])
+            _genome_metadata_contig_to_pydantic_object(genome=id_, gm_contig=gm_contigs_by_name[contig])
             for contig in fa.references
         ]
     finally:

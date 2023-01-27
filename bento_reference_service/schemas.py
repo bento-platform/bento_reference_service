@@ -40,6 +40,7 @@ CONTIG_SCHEMA = {
         },
         "md5": {"type": "string"},
         "trunc512": {"type": "string"},
+        "length": {"type": "integer", "minimum": 0},
     },
     "required": ["name", "md5", "trunc512"],
 }

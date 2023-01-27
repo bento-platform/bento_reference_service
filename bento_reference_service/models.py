@@ -22,12 +22,16 @@ class Alias(BaseModel):
 
 
 class Contig(BaseModel):
+    genome: str
+
     name: str
     aliases: List[Alias]
 
     # checksums for sequence (content-based addressing)
     md5: str
     trunc512: str
+
+    length: int  # Length of sequence
 
 
 class Genome(BaseModel):

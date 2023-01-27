@@ -17,10 +17,10 @@ REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
 
 @app.on_event("startup")
 async def app_startup() -> None:
-    # Create ES indices based on service ID if needed
-
-    if not await es.indices.exists(index=indices.gene_feature_index_name):
-        await es.indices.create(index=indices.gene_feature_index_name, mappings=indices.gene_feature_mappings)
+    # Create all ES indices if needed
+    for index in indices.ALL_INDICES:
+        if not await es.indices.exists(index=index["name"]):
+            await es.indices.create(index=index["name"], mappings=index["mappings"])
 
 
 @app.on_event("shutdown")

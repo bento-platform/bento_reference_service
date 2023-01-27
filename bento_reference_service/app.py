@@ -75,6 +75,15 @@ async def genomes_list() -> List[dict]:
     return [genome_to_response(g) async for g in get_genomes()]
 
 
+# TODO: more normal genome creation endpoint
+
+
+@app.post("/private/ingest")
+async def genomes_ingest() -> List[dict]:
+    # Weird endpoint for now - old Bento ingest style backwards compatibility
+    pass  # TODO
+
+
 # Put FASTA/FAI endpoints ahead of detail endpoint, so they get handled first, and we fall back to treating the whole
 # /genomes/<...> as the genome ID.
 
@@ -106,10 +115,27 @@ async def genomes_detail_contig_detail(genome_id: str, contig_name: str):
     pass
 
 
+@app.get("/genomes/{genome_id}/gene_features.gtf.gz")
+async def genomes_detail_gene_features(genome_id: str):
+    # TODO: how to return empty gtf.gz if nothing is here yet?
+    pass  # TODO: slices of GTF.gz
+
+
+@app.get("/genomes/{genome_id}/gene_features.gtf.gz.tbi")
+async def genomes_detail_gene_features_index(genome_id: str):
+    # TODO: how to return empty gtf.gz.tbi if nothing is here yet?
+    pass  # TODO: gene features GTF tabix file
+
+
+# TODO: more normal annotation PUT endpoint
+
+
 # RefGet
 
 @app.get("/sequence/{sequence_checksum}")
 async def refget_sequence(response: Response, sequence_checksum: str):
+    # TODO: query based on index (exact OR with checksums); fall back to iteration if needed
+
     # TODO: start - query arg
     # TODO: end - query arg
 
@@ -127,7 +153,7 @@ async def refget_sequence(response: Response, sequence_checksum: str):
 async def refget_sequence_metadata(response: Response, sequence_checksum: str) -> dict:
     response.headers["Content-Type"] = REFGET_HEADER_JSON
 
-    # TODO: get contig - maybe we need to index them...
+    # TODO: query based on index (exact OR with checksums); fall back to iteration if needed
 
     return {
         "metadata": {

@@ -1,6 +1,9 @@
-from fastapi import FastAPI, Response
+import re
 
-from typing import List
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse
+
+from typing import List, Optional
 
 from . import __version__, indices, models
 from .config import config
@@ -13,6 +16,8 @@ app = FastAPI()
 
 REFGET_HEADER_TEXT = "text/vnd.ga4gh.refget.v1.0.1+plain"
 REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
+
+RANGE_HEADER_PATTERN = re.compile(r"^bytes=(\d+)-(\d+)?$")
 
 
 @app.on_event("startup")
@@ -88,30 +93,52 @@ async def genomes_ingest() -> List[dict]:
 # /genomes/<...> as the genome ID.
 
 
+async def get_genome_or_error(genome_id: str) -> models.Genome:
+    genome_path = make_genome_path(genome_id)
+
+    if not genome_path.exists():
+        raise HTTPException(status_code=404, detail=f"genome not found: {genome_id}")
+
+    # TODO: handle format errors with 500
+    return await get_genome(genome_path)
+
+
 @app.get("/genomes/{genome_id}.fa")
-async def genomes_detail_fasta(genome_id: str):
+async def genomes_detail_fasta(genome_id: str, request: Request):
+    genome: models.Genome = await get_genome_or_error(genome_id)
+
+    # Don't use FastAPI's auto-Header tool for the Range header
+    # 'cause I don't want to shadow Python's range() function
+    range_header: Optional[str] = request.headers.get("Range", None)
+
+    if range_header is None:
+        # TODO: send the file if no range header and the FASTA is below some response size limit
+        return
+
+    # TODO: read FASTA at bytes specified
     pass
 
 
 @app.get("/genomes/{genome_id}.fa.fai")
 async def genomes_detail_fasta_index(genome_id: str):
-    pass
+    genome: models.Genome = await get_genome_or_error(genome_id)
+    return FileResponse(genome.fai)
 
 
 @app.get("/genomes/{genome_id}")
 async def genomes_detail(genome_id: str):
-    genome_path = make_genome_path(genome_id)
-    return genome_to_response(await get_genome(genome_path))
+    return genome_to_response(await get_genome_or_error(genome_id))
 
 
 @app.get("/genomes/{genome_id}/contigs")
 async def genomes_detail_contigs(genome_id: str):
-    genome_path = make_genome_path(genome_id)
-    return genome_contigs_response(await get_genome(genome_path))
+    return genome_contigs_response(await get_genome_or_error(genome_id))
 
 
 @app.get("/genomes/{genome_id}/contigs/{contig_name}")
 async def genomes_detail_contig_detail(genome_id: str, contig_name: str):
+    # TODO: Use ES in front?
+    genome: models.Genome = await get_genome_or_error(genome_id)
     pass
 
 

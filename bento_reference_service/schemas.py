@@ -1,63 +1,70 @@
+from jsonschema import Draft202012Validator
+from .config import config
+
 __all__ = [
-    "alias_schema",
-    "contig_schema",
-    "genome_metadata_schema",
+    "schema_uri",
+    "ALIAS_SCHEMA",
+    "CONTIG_SCHEMA",
+    "GENOME_METADATA_SCHEMA",
+    "GENOME_METADATA_SCHEMA_VALIDATOR",
 ]
 
 
-def alias_schema(base_uri: str):
-    return {
-        "$id": f"{base_uri.rstrip('/')}/alias.json",
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Alias",
-        "type": "object",
-        "properties": {
-            "alias": {"type": "string"},
-            "naming_authority": {"type": "string"},
+def schema_uri(path: str) -> str:
+    return f"{config.service_url_base_path.rstrip('/')}/schemas/{path}"
+
+
+ALIAS_SCHEMA = {
+    "$id": schema_uri("alias.json"),
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Alias",
+    "type": "object",
+    "properties": {
+        "alias": {"type": "string"},
+        "naming_authority": {"type": "string"},
+    },
+    "required": ["alias", "naming_authority"],
+}
+
+
+CONTIG_SCHEMA = {
+    "$id": schema_uri("contig.json"),
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Contig",
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "aliases": {
+            "type": "array",
+            "items": ALIAS_SCHEMA,
         },
-        "required": ["alias", "naming_authority"],
-    }
+        "md5": {"type": "string"},
+        "trunc512": {"type": "string"},
+    },
+    "required": ["name", "md5", "trunc512"],
+}
 
 
-def contig_schema(base_uri: str):
-    return {
-        "$id": f"{base_uri.rstrip('/')}/contig.json",
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Contig",
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "aliases": {
-                "type": "array",
-                "items": alias_schema(base_uri),
-            },
-            "md5": {"type": "string"},
-            "trunc512": {"type": "string"},
+GENOME_METADATA_SCHEMA = {
+    "$id": schema_uri("genome_metadata.json"),
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Genome Metadata",
+    "type": "object",
+    "properties": {
+        "id": {"type": "string"},
+        "aliases": {
+            "type": "array",
+            "items": ALIAS_SCHEMA,
         },
-        "required": ["name", "md5", "trunc512"],
-    }
-
-
-def genome_metadata_schema(base_uri: str):
-    return {
-        "$id": f"{base_uri.rstrip('/')}/genome_metadata.json",
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Genome Metadata",
-        "type": "object",
-        "properties": {
-            "id": {"type": "string"},
-            "aliases": {
-                "type": "array",
-                "items": alias_schema(base_uri),
-            },
-            "md5": {"type": "string"},
-            "trunc512": {"type": "string"},
-            "contigs": {
-                "type": "array",
-                "items": contig_schema(base_uri),
-            },
-            "fasta": {"type": "string"},  # Path or URI
-            "fai": {"type": "string"},  # Path or URI
+        "md5": {"type": "string"},
+        "trunc512": {"type": "string"},
+        "contigs": {
+            "type": "array",
+            "items": CONTIG_SCHEMA,
         },
-        "required": ["id", "md5", "trunc512", "contigs", "fasta", "fai"],
-    }
+        "fasta": {"type": "string"},  # Path or URI
+        "fai": {"type": "string"},  # Path or URI
+    },
+    "required": ["id", "md5", "trunc512", "contigs", "fasta", "fai"],
+}
+GENOME_METADATA_SCHEMA_VALIDATOR = Draft202012Validator(GENOME_METADATA_SCHEMA)

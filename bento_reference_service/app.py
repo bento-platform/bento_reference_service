@@ -128,6 +128,7 @@ async def genomes_detail_gene_features_index(genome_id: str):
 
 
 # TODO: more normal annotation PUT endpoint
+#  - treat gene_features as a file that can be replaced basically
 
 
 # RefGet

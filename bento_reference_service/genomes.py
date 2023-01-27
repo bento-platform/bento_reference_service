@@ -2,6 +2,7 @@ import aiofiles
 import asyncio
 import gffutils
 import json
+import jsonschema
 import pysam
 import re
 
@@ -12,6 +13,7 @@ from .config import config
 from .es import es
 from .logger import logger
 from .models import Alias, Contig, Genome
+from .schemas import GENOME_METADATA_SCHEMA_VALIDATOR
 from .utils import make_uri
 
 __all__ = [
@@ -80,22 +82,28 @@ async def ingest_genome(bento_genome_path: Path) -> None:
     # Read ID from metadata.json
     async with aiofiles.open(metadata_path, "r") as mf:
         genome_metadata = json.loads(await mf.read())
+
+    # Validate the metadata JSON before we try to use the data
+    try:
+        GENOME_METADATA_SCHEMA_VALIDATOR.validate(genome_metadata)
+    except jsonschema.exceptions.ValidationError as e:
+        # TODO: details
+        # TODO: logging
+        raise GenomeFormatError("invalid metadata JSON")
+
     id_ = genome_metadata["id"]
 
     # Check if the genome ID is valid - ensures no funky file names
     if not VALID_GENOME_ID.match(id_):
         raise GenomeFormatError(f"invalid genome ID: {id_} (must match /{VALID_GENOME_ID.pattern}/)")
 
-    dest_path = make_genome_path(id_)
-
+    # Copy the genome directory to service storage
     copy_proc = await asyncio.create_subprocess_exec(
         "cp",
         str(bento_genome_path.absolute().resolve()),
-        str(dest_path),
+        str(make_genome_path(id_)),
     )
-
     stdout, stderr = await copy_proc.communicate()
-
     if (rc := copy_proc.returncode) != 0:
         raise GenomeFormatError(f"on copy, got non-0 return code {rc} (stdout={stdout}, stderr={stderr})")
 

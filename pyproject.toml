@@ -11,6 +11,9 @@ authors = [
 ]
 readme = "README.md"
 packages = [{include = "bento_reference_service"}]
+include = [
+    "bento_reference_service/workflows/wdls/*.wdl",
+]
 repository = "https://github.com/bento-platform/bento_reference_service"
 license = "LGPL-3.0-only"
 classifiers = [

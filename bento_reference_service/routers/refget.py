@@ -3,13 +3,13 @@ import pysam
 from fastapi import APIRouter, HTTPException, Request, Response
 from typing import Optional, Union
 
-from . import indices, models
-from .config import config
-from .constants import RANGE_HEADER_PATTERN
-from .es import es
-from .genomes import get_genomes
-from .logger import logger
-from .utils import get_genome_or_error
+from bento_reference_service import indices, models
+from bento_reference_service.config import config
+from bento_reference_service.constants import RANGE_HEADER_PATTERN
+from bento_reference_service.es import es
+from bento_reference_service.genomes import get_genomes
+from bento_reference_service.logger import logger
+from bento_reference_service.utils import get_genome_or_error
 
 
 __all__ = [

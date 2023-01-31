@@ -1,3 +1,4 @@
+import re
 from bento_reference_service import __version__
 
 __all__ = [
@@ -5,6 +6,8 @@ __all__ = [
     "SERVICE_GROUP",
     "SERVICE_ARTIFACT",
     "SERVICE_TYPE",
+
+    "RANGE_HEADER_PATTERN",
 ]
 
 BENTO_SERVICE_KIND = "reference"
@@ -17,3 +20,5 @@ SERVICE_TYPE = {
     "artifact": SERVICE_ARTIFACT,
     "version": __version__,
 }
+
+RANGE_HEADER_PATTERN = re.compile(r"^bytes=(\d+)-(\d+)?$")

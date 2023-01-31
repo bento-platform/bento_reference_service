@@ -4,6 +4,7 @@ from . import __version__
 from .config import config
 from .constants import BENTO_SERVICE_KIND, SERVICE_TYPE
 from .es import es, create_all_indices
+from .routers.data_types import data_type_router
 from .routers.genomes import genome_router
 from .routers.ingest import ingest_router
 from .routers.refget import refget_router
@@ -32,10 +33,12 @@ async def app_shutdown() -> None:
 
 
 # Attach different routers to the app, for:
+# - data type listing (for Bento-style search)
 # - genome listing
 # - ingest handling
 # - our RefGet API implementation
 # - our JSON schemas
+app.include_router(data_type_router)
 app.include_router(genome_router)
 app.include_router(ingest_router)
 app.include_router(refget_router)

@@ -5,7 +5,7 @@ import re
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from . import __version__, indices, models
 from .config import config
@@ -219,8 +219,58 @@ async def get_contig_by_checksum(checksum: str) -> Optional[models.Contig]:
 
 
 @app.get("/sequence/{sequence_checksum}")
-async def refget_sequence(response: Response, sequence_checksum: str):
+async def refget_sequence(
+    request: Request,
+    response: Response,
+    sequence_checksum: str,
+    start: Union[int, None] = None,
+    end: Union[int, None] = None,
+):
+    response.headers["Content-Type"] = REFGET_HEADER_TEXT
+
+    # TODO: Range - which first?
+
+    accept_header: Optional[str] = request.headers.get("Accept", None)
+    if accept_header and accept_header not in (REFGET_HEADER_TEXT, "text/plain"):
+        raise HTTPException(status_code=406, detail="Not Acceptable")   # TODO: plain text error
+
+    # Don't use FastAPI's auto-Header tool for the Range header
+    # 'cause I don't want to shadow Python's range() function
+    range_header: Optional[str] = request.headers.get("Range", None)
+
+    if (start or end) and range_header:
+        # TODO: Valid plain text error
+        raise HTTPException(status_code=400, detail="cannot specify both start/end and Range header")
+
     contig: Optional[models.Contig] = await get_contig_by_checksum(sequence_checksum)
+
+    start_final: int = 0  # 0-based, inclusive
+    end_final: int = contig.length - 1  # 0-based, inclusive - need to adjust ?end= query param (which is exclusive)
+
+    if start is not None:
+        if start >= contig.length:
+            # start is 0-based; so if it's set to contig.length or more, it is out of range.
+            raise HTTPException(status_code=400, detail="start cannot be longer than sequence")
+
+        if end is not None:
+            if start > end:
+                if not contig.circular:
+                    raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+            end_final = end - 1
+
+        start_final = start
+
+    if range_header is not None:
+        range_header_match = RANGE_HEADER_PATTERN.match(range_header)
+        if not range_header_match:
+            raise HTTPException(status_code=400, detail="bad range")
+
+        try:
+            start_final = int(range_header_match.group(1))
+            if end_val := range_header_match.group(2):
+                end_final = end_val  # range is inclusive, so we don't have to adjust it
+        except ValueError:
+            raise HTTPException(status_code=400, detail="bad range")
 
     if contig is None:
         # TODO: proper 404 for refget spec
@@ -228,16 +278,9 @@ async def refget_sequence(response: Response, sequence_checksum: str):
 
     genome = await get_genome_or_error(contig.genome)
 
-    # TODO: start - query arg (optional)
-    # TODO: end - query arg (optional)
+    if end_final - start_final + 1 > config.response_substring_limit:
+        raise HTTPException(status_code=400, detail="request for too many bytes")  # TODO: what is real error?
 
-    # TODO: Range - which first?
-
-    # TODO: Validate max length - subsequence_limit (if not set, check length of whole contig)
-
-    # TODO: Not Acceptable response to non-text plain (with fallbacks) request
-
-    response.headers["Content-Type"] = REFGET_HEADER_TEXT
     # TODO: generate chunks in response
 
 

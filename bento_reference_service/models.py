@@ -32,6 +32,7 @@ class Contig(BaseModel):
     trunc512: str
 
     length: int  # Length of sequence
+    circular: bool
 
 
 class Genome(BaseModel):

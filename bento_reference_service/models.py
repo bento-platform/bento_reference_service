@@ -12,6 +12,11 @@ __all__ = [
 # Pydantic/dict models, not database models
 
 
+class OntologyTerm(BaseModel):
+    id: str
+    label: str
+
+
 class Alias(BaseModel):
     """
     Alias for a genome or contig; modeled after alias representation from RefGet.
@@ -47,4 +52,6 @@ class Genome(BaseModel):
     fasta: Path
     fai: Path
 
+    # biological information
+    taxon: OntologyTerm  # MUST be from NCBITaxon ontology - ingestion SHOULD validate this
     contigs: List[Contig]

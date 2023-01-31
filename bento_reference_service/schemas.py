@@ -14,6 +14,19 @@ def schema_uri(path: str) -> str:
     return f"{config.service_url_base_path.rstrip('/')}/schemas/{path}"
 
 
+ONTOLOGY_TERM_SCHEMA = {
+    "$id": schema_uri("ontology_term.json"),
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Ontology Term",
+    "type": "object",
+    "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+    },
+    "required": ["id", "label"],
+}
+
+
 ALIAS_SCHEMA = {
     "$id": schema_uri("alias.json"),
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -59,6 +72,7 @@ GENOME_METADATA_SCHEMA = {
         },
         "md5": {"type": "string"},
         "trunc512": {"type": "string"},
+        "taxon": ONTOLOGY_TERM_SCHEMA,
         "contigs": {
             "type": "array",
             "items": CONTIG_SCHEMA,

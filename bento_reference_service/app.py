@@ -12,6 +12,7 @@ from .config import config
 from .constants import BENTO_SERVICE_KIND, SERVICE_TYPE
 from .es import es
 from .genomes import make_genome_path, get_genome, get_genomes
+from .logger import logger
 from .utils import make_uri
 
 app = FastAPI()
@@ -202,17 +203,43 @@ async def genomes_detail_gene_features_index(genome_id: str):
 
 async def get_contig_by_checksum(checksum: str) -> Optional[models.Contig]:
     es_resp = await es.search(index=indices.genome_index["name"], query={
-
+        "nested": {
+            "path": "contigs",
+            "query": {
+                "bool": {
+                    "should": [
+                        {"match": {"contigs.md5": checksum}},
+                        {"match": {"contigs.trunc512": checksum}},
+                    ],
+                },
+            },
+            "inner_hits": {},
+            "score_mode": "max",  # We are interested in the
+        },
     })
+
     if es_resp["hits"]["total"]["value"] > 0:
         # Use ES result, since we got a hit
-        sc = es_resp["hits"]["hits"][0]
-        return models.Contig(**sc)
+        sg = es_resp["hits"]["hits"][0]
 
-    # Manually iterate
+        # We have the genome, but we still need to extract the contig from inner hits
+        if sg["inner_hits"]["contigs"]["hits"]["total"]["value"] > 0:
+            # We have a contig hit, so return it
+            return models.Contig(**sg["inner_hits"]["contigs"]["hits"]["hits"][0]["_source"])
+
+        for sc in sg["contigs"]:
+            if checksum in (sc["md5"], sc["trunc512"]):
+                return models.Contig(**sc)
+
+        logger.error(f"Found ES hit for checksum {checksum} but could not find contig in inner hits")
+
+    logger.debug(f"No hits in ES index for checksum {checksum}")
+
+    # Manually iterate as a fallback
     async for genome in get_genomes():
         for sc in genome.contigs:
-            if sc.md5 == checksum or sc.trunc512 == checksum:
+            if checksum in (sc.md5, sc.trunc512):
+                logger.warning(f"Found manual hit for {checksum}, but no corresponding entry in ES index")
                 return sc
 
     return None

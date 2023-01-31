@@ -1,4 +1,6 @@
 from jsonschema import Draft202012Validator
+from typing import Dict, List, TypedDict
+
 from .config import config
 
 __all__ = [
@@ -7,6 +9,7 @@ __all__ = [
     "CONTIG_SCHEMA",
     "GENOME_METADATA_SCHEMA",
     "GENOME_METADATA_SCHEMA_VALIDATOR",
+    "SCHEMAS_BY_FILE_NAME",
 ]
 
 
@@ -14,7 +17,17 @@ def schema_uri(path: str) -> str:
     return f"{config.service_url_base_path.rstrip('/')}/schemas/{path}"
 
 
-ONTOLOGY_TERM_SCHEMA = {
+TDJSONSchema = TypedDict("TDJSONSchema", {
+    "$id": str,
+    "$schema": str,
+    "title": str,
+    "type": str,
+    "properties": Dict[str, dict],
+    "required": List[str],
+}, total=False)
+
+
+ONTOLOGY_TERM_SCHEMA: TDJSONSchema = {
     "$id": schema_uri("ontology_term.json"),
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Ontology Term",
@@ -27,7 +40,7 @@ ONTOLOGY_TERM_SCHEMA = {
 }
 
 
-ALIAS_SCHEMA = {
+ALIAS_SCHEMA: TDJSONSchema = {
     "$id": schema_uri("alias.json"),
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Alias",
@@ -40,7 +53,7 @@ ALIAS_SCHEMA = {
 }
 
 
-CONTIG_SCHEMA = {
+CONTIG_SCHEMA: TDJSONSchema = {
     "$id": schema_uri("contig.json"),
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Contig",
@@ -59,7 +72,7 @@ CONTIG_SCHEMA = {
 }
 
 
-GENOME_METADATA_SCHEMA = {
+GENOME_METADATA_SCHEMA: TDJSONSchema = {
     "$id": schema_uri("genome_metadata.json"),
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Genome Metadata",
@@ -83,3 +96,11 @@ GENOME_METADATA_SCHEMA = {
     "required": ["id", "md5", "trunc512", "contigs", "fasta", "fai"],
 }
 GENOME_METADATA_SCHEMA_VALIDATOR = Draft202012Validator(GENOME_METADATA_SCHEMA)
+
+
+SCHEMAS_BY_FILE_NAME: Dict[str, TDJSONSchema] = {
+    "ontology_term.json": ONTOLOGY_TERM_SCHEMA,
+    "alias_schema.json": ALIAS_SCHEMA,
+    "contig_schema.json": CONTIG_SCHEMA,
+    "genome_metadata.json": GENOME_METADATA_SCHEMA,
+}

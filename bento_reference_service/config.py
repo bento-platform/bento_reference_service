@@ -18,5 +18,8 @@ class Config(BaseSettings):
 
     response_substring_limit: int = 10000  # TODO: Refine default
 
+    # /service-info customization
+    service_contact_url: str = "mailto:info@c3g.ca"
+
 
 config = Config()

@@ -10,22 +10,22 @@ from .routers.refget import refget_router
 
 app = FastAPI()
 
-REFGET_HEADER_TEXT = "text/vnd.ga4gh.refget.v1.0.1+plain"
-REFGET_HEADER_TEXT_WITH_CHARSET = f"{REFGET_HEADER_TEXT}; charset=us-ascii"
-REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
-REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
-
 
 @app.on_event("startup")
 async def app_startup() -> None:
     """
     Perform all app startup tasks, including creating all ES indices if needed.
     """
+
+    # Create all ES indices if needed
     await create_all_indices()
 
 
 @app.on_event("shutdown")
 async def app_shutdown() -> None:
+    """
+    Perform all app pre-shutdown tasks, for now just closing the ES connection.
+    """
     # Don't 'leak' ES connection - close it when the app process is closed
     await es.close()
 
@@ -47,7 +47,7 @@ async def service_info():
             "name": "C3G",
             "url": "https://www.computationalgenomics.ca"
         },
-        "contactUrl": "mailto:info@c3g.ca",
+        "contactUrl": config.service_contact_url,
         "version": __version__,
         "environment": "prod",
         "bento": {
@@ -56,4 +56,3 @@ async def service_info():
             "gitRepository": "https://github.com/bento-platform/bento_reference_service",
         },
     }
-

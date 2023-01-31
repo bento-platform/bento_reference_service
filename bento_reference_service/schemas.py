@@ -155,7 +155,7 @@ GENOME_METADATA_SCHEMA: TDJSONSchema = {
         "fasta": {"type": "string"},  # Path or URI
         "fai": {"type": "string"},  # Path or URI
     },
-    "required": ["id", "md5", "trunc512", "contigs", "fasta", "fai"],
+    "required": ["id", "md5", "trunc512", "contigs"],
 }
 GENOME_METADATA_SCHEMA_VALIDATOR = Draft202012Validator(GENOME_METADATA_SCHEMA)
 

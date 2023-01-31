@@ -13,7 +13,7 @@ from bento_reference_service.utils import get_genome_or_error
 
 
 __all__ = [
-    "refget",
+    "refget_router",
 ]
 
 
@@ -22,7 +22,7 @@ REFGET_HEADER_TEXT_WITH_CHARSET = f"{REFGET_HEADER_TEXT}; charset=us-ascii"
 REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
 REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
 
-refget = APIRouter(prefix="/sequence")
+refget_router = APIRouter(prefix="/sequence")
 
 
 async def get_contig_by_checksum(checksum: str) -> Optional[models.Contig]:
@@ -69,7 +69,7 @@ async def get_contig_by_checksum(checksum: str) -> Optional[models.Contig]:
     return None
 
 
-@refget.get("/{sequence_checksum}")
+@refget_router.get("/{sequence_checksum}")
 async def refget_sequence(
     request: Request,
     response: Response,
@@ -142,7 +142,7 @@ async def refget_sequence(
         fa.close()
 
 
-@refget.get("/{sequence_checksum}/metadata")
+@refget_router.get("/{sequence_checksum}/metadata")
 async def refget_sequence_metadata(response: Response, sequence_checksum: str) -> dict:  # TODO: type: refget resp
     contig: Optional[models.Contig] = await get_contig_by_checksum(sequence_checksum)
 
@@ -163,7 +163,7 @@ async def refget_sequence_metadata(response: Response, sequence_checksum: str) -
     }
 
 
-@refget.get("/service-info")
+@refget_router.get("/service-info")
 async def refget_service_info(response: Response) -> dict:
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
     return {

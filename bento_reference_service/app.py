@@ -62,6 +62,7 @@ async def service_info():
         "environment": "prod",
         "bento": {
             "serviceKind": BENTO_SERVICE_KIND,
+            "dataService": True,
             "gitRepository": "https://github.com/bento-platform/bento_reference_service",
         },
     }
@@ -318,7 +319,7 @@ async def refget_sequence(
 
     fa = pysam.FastaFile(filename=str(genome.fasta), filepath_index=str(genome.fai))
     try:
-        # TODO: handle missing region error explicitly
+        # TODO: handle missing region / coordinate exceptions explicitly
         return fa.fetch(contig.name, start_final, end_final).encode("ascii")
     finally:
         fa.close()

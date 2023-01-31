@@ -1,5 +1,4 @@
 import aiofiles
-import math
 import re
 
 import pysam
@@ -11,7 +10,7 @@ from typing import List, Optional, Union
 from . import __version__, indices, models
 from .config import config
 from .constants import BENTO_SERVICE_KIND, SERVICE_TYPE
-from .es import es
+from .es import es, create_all_indices
 from .genomes import make_genome_path, get_genome, get_genomes
 from .logger import logger
 from .utils import make_uri
@@ -19,21 +18,26 @@ from .utils import make_uri
 app = FastAPI()
 
 REFGET_HEADER_TEXT = "text/vnd.ga4gh.refget.v1.0.1+plain"
+REFGET_HEADER_TEXT_WITH_CHARSET = f"{REFGET_HEADER_TEXT}; charset=us-ascii"
 REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
+REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
 
 RANGE_HEADER_PATTERN = re.compile(r"^bytes=(\d+)-(\d+)?$")
 
-EXC_BAD_RANGE = HTTPException(status_code=400, detail=f"invalid range header value: {range_header}")
+
+def exc_bad_range(range_header: str) -> HTTPException:
+    return HTTPException(status_code=400, detail=f"invalid range header value: {range_header}")
+
 
 CHUNK_SIZE = 1024 * 16  # 16 KB at a time
 
 
 @app.on_event("startup")
 async def app_startup() -> None:
-    # Create all ES indices if needed
-    for index in indices.ALL_INDICES:
-        if not await es.indices.exists(index=index["name"]):
-            await es.indices.create(index=index["name"], mappings=index["mappings"])
+    """
+    Perform all app startup tasks, including creating all ES indices if needed.
+    """
+    await create_all_indices()
 
 
 @app.on_event("shutdown")
@@ -94,7 +98,7 @@ async def genomes_list() -> List[dict]:
 @app.post("/private/ingest")
 async def genomes_ingest() -> List[dict]:
     # Weird endpoint for now - old Bento ingest style backwards compatibility
-    pass  # TODO
+    raise NotImplementedError()  # TODO
 
 
 # Put FASTA/FAI endpoints ahead of detail endpoint, so they get handled first, and we fall back to treating the whole
@@ -121,11 +125,11 @@ async def genomes_detail_fasta(genome_id: str, request: Request):
 
     if range_header is None:
         # TODO: send the file if no range header and the FASTA is below some response size limit
-        return
+        raise NotImplementedError()
 
     range_header_match = RANGE_HEADER_PATTERN.match(range_header)
     if not range_header_match:
-        raise EXC_BAD_RANGE
+        raise exc_bad_range(range_header)
 
     start: int = 0
     end: Optional[int] = None
@@ -135,7 +139,7 @@ async def genomes_detail_fasta(genome_id: str, request: Request):
         end_val = range_header_match.group(2)
         end = end_val if end_val is None else int(end_val)
     except ValueError:
-        raise EXC_BAD_RANGE
+        raise exc_bad_range(range_header)
 
     async def stream_file():
         # TODO: Use range support from FastAPI when it is merged
@@ -181,19 +185,20 @@ async def genomes_detail_contigs(genome_id: str):
 async def genomes_detail_contig_detail(genome_id: str, contig_name: str):
     # TODO: Use ES in front?
     genome: models.Genome = await get_genome_or_error(genome_id)
-    pass
+    raise NotImplementedError()
 
 
 @app.get("/genomes/{genome_id}/gene_features.gtf.gz")
 async def genomes_detail_gene_features(genome_id: str):
     # TODO: how to return empty gtf.gz if nothing is here yet?
-    pass  # TODO: slices of GTF.gz
+    raise NotImplementedError()
+    # TODO: slices of GTF.gz
 
 
 @app.get("/genomes/{genome_id}/gene_features.gtf.gz.tbi")
 async def genomes_detail_gene_features_index(genome_id: str):
     # TODO: how to return empty gtf.gz.tbi if nothing is here yet?
-    pass  # TODO: gene features GTF tabix file
+    raise NotImplementedError()  # TODO: gene features GTF tabix file
 
 
 # TODO: more normal annotation PUT endpoint
@@ -254,10 +259,10 @@ async def refget_sequence(
     start: Union[int, None] = None,
     end: Union[int, None] = None,
 ):
-    response.headers["Content-Type"] = REFGET_HEADER_TEXT
+    response.headers["Content-Type"] = REFGET_HEADER_TEXT_WITH_CHARSET
 
     accept_header: Optional[str] = request.headers.get("Accept", None)
-    if accept_header and accept_header not in (REFGET_HEADER_TEXT, "text/plain"):
+    if accept_header and accept_header not in (REFGET_HEADER_TEXT_WITH_CHARSET, REFGET_HEADER_TEXT, "text/plain"):
         raise HTTPException(status_code=406, detail="Not Acceptable")   # TODO: plain text error
 
     # Don't use FastAPI's auto-Header tool for the Range header
@@ -275,6 +280,7 @@ async def refget_sequence(
 
     if start is not None:
         if end is not None:
+            response.headers["Accept-Ranges"] = "none"
             if start > end:
                 if not contig.circular:
                     raise HTTPException(status_code=416, detail="Range Not Satisfiable")
@@ -322,11 +328,13 @@ async def refget_sequence(
 async def refget_sequence_metadata(response: Response, sequence_checksum: str) -> dict:  # TODO: type: refget resp
     contig: Optional[models.Contig] = await get_contig_by_checksum(sequence_checksum)
 
+    response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
+
     if contig is None:
         # TODO: proper 404 for refget spec
+        # TODO: proper content type for exception - RefGet error class?
         raise HTTPException(status_code=404, detail=f"sequence not found with checksum: {sequence_checksum}")
 
-    response.headers["Content-Type"] = REFGET_HEADER_JSON
     return {
         "metadata": {
             "md5": contig.md5,
@@ -339,7 +347,7 @@ async def refget_sequence_metadata(response: Response, sequence_checksum: str) -
 
 @app.get("/sequence/service-info")
 async def refget_service_info(response: Response) -> dict:
-    response.headers["Content-Type"] = REFGET_HEADER_JSON
+    response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
     return {
         "service": {
             "circular_supported": False,

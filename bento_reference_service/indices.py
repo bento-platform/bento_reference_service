@@ -72,3 +72,4 @@ ALL_INDICES: Tuple[BentoESIndex, ...] = (
     genome_index,
     gene_feature_index,
 )
+

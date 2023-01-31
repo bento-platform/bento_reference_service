@@ -2,6 +2,7 @@ import aiofiles
 import math
 import re
 
+import pysam
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 
@@ -255,8 +256,6 @@ async def refget_sequence(
 ):
     response.headers["Content-Type"] = REFGET_HEADER_TEXT
 
-    # TODO: Range - which first?
-
     accept_header: Optional[str] = request.headers.get("Accept", None)
     if accept_header and accept_header not in (REFGET_HEADER_TEXT, "text/plain"):
         raise HTTPException(status_code=406, detail="Not Acceptable")   # TODO: plain text error
@@ -272,19 +271,14 @@ async def refget_sequence(
     contig: Optional[models.Contig] = await get_contig_by_checksum(sequence_checksum)
 
     start_final: int = 0  # 0-based, inclusive
-    end_final: int = contig.length - 1  # 0-based, inclusive - need to adjust ?end= query param (which is exclusive)
+    end_final: int = contig.length - 1  # 0-based, exclusive - need to adjust range (which is inclusive)
 
     if start is not None:
-        if start >= contig.length:
-            # start is 0-based; so if it's set to contig.length or more, it is out of range.
-            raise HTTPException(status_code=400, detail="start cannot be longer than sequence")
-
         if end is not None:
             if start > end:
                 if not contig.circular:
                     raise HTTPException(status_code=416, detail="Range Not Satisfiable")
-            end_final = end - 1
-
+            end_final = end
         start_final = start
 
     if range_header is not None:
@@ -295,20 +289,33 @@ async def refget_sequence(
         try:
             start_final = int(range_header_match.group(1))
             if end_val := range_header_match.group(2):
-                end_final = end_val  # range is inclusive, so we don't have to adjust it
+                end_final = end_val + 1  # range is inclusive, so we have to adjust it to be exclusive
         except ValueError:
             raise HTTPException(status_code=400, detail="bad range")
+
+    # Final bounds-checking
+    if start_final >= contig.length:
+        # start is 0-based; so if it's set to contig.length or more, it is out of range.
+        raise HTTPException(status_code=400, detail="start cannot be longer than sequence")
+    if end_final > contig.length:
+        # end is 0-based inclusive
+        raise HTTPException(status_code=400, detail="end cannot be past the end of the sequence")
 
     if contig is None:
         # TODO: proper 404 for refget spec
         raise HTTPException(status_code=404, detail=f"sequence not found with checksum: {sequence_checksum}")
 
-    genome = await get_genome_or_error(contig.genome)
-
-    if end_final - start_final + 1 > config.response_substring_limit:
+    if end_final - start_final > config.response_substring_limit:
         raise HTTPException(status_code=400, detail="request for too many bytes")  # TODO: what is real error?
 
-    # TODO: generate chunks in response
+    genome = await get_genome_or_error(contig.genome)
+
+    fa = pysam.FastaFile(filename=str(genome.fasta), filepath_index=str(genome.fai))
+    try:
+        # TODO: handle missing region error explicitly
+        return fa.fetch(contig.name, start_final, end_final).encode("ascii")
+    finally:
+        fa.close()
 
 
 @app.get("/sequence/{sequence_checksum}/metadata")

@@ -9,6 +9,7 @@ from .routers.genomes import genome_router
 from .routers.ingest import ingest_router
 from .routers.refget import refget_router
 from .routers.schemas import schema_router
+from .tables import create_table_id_if_needed
 
 app = FastAPI()
 
@@ -16,11 +17,14 @@ app = FastAPI()
 @app.on_event("startup")
 async def app_startup() -> None:
     """
-    Perform all app startup tasks, including creating all ES indices if needed.
+    Perform all app startup tasks.
     """
 
     # Create all ES indices if needed
     await create_all_indices()
+
+    # Create the instance-wide 'table' for Bento search/ingestion compatibility, if not done already.
+    await create_table_id_if_needed()
 
 
 @app.on_event("shutdown")

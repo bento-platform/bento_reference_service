@@ -9,11 +9,11 @@ from elasticsearch.helpers import async_streaming_bulk
 from pathlib import Path
 from typing import Dict, List, Generator, Optional, Tuple
 
+from . import models as m
 from .config import config
 from .es import es
 from .indices import genome_index
 from .logger import logger
-from .models import Alias, Contig, Genome
 from .schemas import GENOME_METADATA_SCHEMA_VALIDATOR
 from .utils import make_uri
 
@@ -88,7 +88,7 @@ async def ingest_genome(bento_genome_path: Path) -> None:
     # Validate the metadata JSON before we try to use the data
     try:
         GENOME_METADATA_SCHEMA_VALIDATOR.validate(genome_metadata)
-    except jsonschema.exceptions.ValidationError as e:
+    except jsonschema.exceptions.ValidationError:  # TODO: as e --> use for errors
         # TODO: details
         # TODO: logging
         raise GenomeFormatError("invalid metadata JSON")
@@ -131,11 +131,11 @@ async def ingest_gene_feature_annotation(
     # TODO: make sure it's a gtf.gz
     # TODO: copy it in place
 
-    genome: Genome = await get_genome(make_genome_path(genome_id))
+    genome: m.Genome = await get_genome(make_genome_path(genome_id))
 
     log_progress_interval = 1000
 
-    async def _iter_features():
+    def _iter_features() -> Generator[m.GTFFeature, None, None]:
         gtf = pysam.TabixFile(str(gtf_annotation_path), index=str(gtf_annotation_index_path))
         total_processed: int = 0
         try:
@@ -214,10 +214,10 @@ async def ingest_gene_feature_annotation(
             raise AnnotationIngestError(f"failed to {action} document: {result}")
 
 
-def _genome_metadata_contig_to_pydantic_object(genome: str, gm_contig: dict) -> Contig:
+def _genome_metadata_contig_to_pydantic_object(genome: str, gm_contig: dict) -> m.Contig:
     # TODO: Build a super-model class with pydantic/JSON schema representations/converters
-    contig_aliases: List[Alias] = [Alias(**ca) for ca in gm_contig.get("aliases", [])]
-    return Contig(
+    contig_aliases: List[m.Alias] = [m.Alias(**ca) for ca in gm_contig.get("aliases", [])]
+    return m.Contig(
         genome=genome,
         name=gm_contig["name"],
         aliases=contig_aliases,
@@ -227,7 +227,7 @@ def _genome_metadata_contig_to_pydantic_object(genome: str, gm_contig: dict) -> 
     )
 
 
-async def get_genome(genome: Path) -> Genome:
+async def get_genome(genome: Path) -> m.Genome:
     if not genome.is_dir():
         raise GenomeFormatError("not a directory")
 
@@ -255,16 +255,16 @@ async def get_genome(genome: Path) -> Genome:
     fa = pysam.FastaFile(str(sequence_path), filepath_index=str(sequence_index_path))
     try:
         gm_contigs_by_name: Dict[str, dict] = {gmc["name"]: gmc for gmc in genome_metadata["contigs"]}
-        contigs: List[Contig] = [
+        contigs: List[m.Contig] = [
             _genome_metadata_contig_to_pydantic_object(genome=id_, gm_contig=gm_contigs_by_name[contig])
             for contig in fa.references
         ]
     finally:
         fa.close()
 
-    return Genome(
+    return m.Genome(
         id=id_,
-        aliases=[Alias(**alias) for alias in genome_metadata.get("aliases", [])],
+        aliases=[m.Alias(**alias) for alias in genome_metadata.get("aliases", [])],
         uri=make_uri(f"/genomes/{id_}"),
         contigs=contigs,
         md5=genome_metadata["md5"],
@@ -274,7 +274,7 @@ async def get_genome(genome: Path) -> Genome:
     )
 
 
-async def get_genomes() -> Generator[Genome, None, None]:
+async def get_genomes() -> Generator[m.Genome, None, None]:
     for genome in config.data_path.glob("*.bentoGenome"):
         try:
             yield await get_genome(genome)

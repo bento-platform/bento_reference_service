@@ -1,15 +1,25 @@
 from pathlib import Path
 from pydantic import BaseModel
 
-from typing import List
+from typing import List, TypedDict
 
 __all__ = [
+    "GTFFeature",
     "Alias",
     "Contig",
     "Genome",
 ]
 
 # Pydantic/dict models, not database models
+
+
+class GTFFeature(TypedDict):
+    id: str
+    name: str
+    position: str
+    type: str
+    genome: str
+    strand: str
 
 
 class OntologyTerm(BaseModel):
@@ -55,3 +65,4 @@ class Genome(BaseModel):
     # biological information
     taxon: OntologyTerm  # MUST be from NCBITaxon ontology - ingestion SHOULD validate this
     contigs: List[Contig]
+

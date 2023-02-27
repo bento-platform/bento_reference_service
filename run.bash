@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Set .gitconfig for development
-/set_gitconfig.bash
-
 export ASGI_APP="bento_reference_service.app:app"
 
 if [[ -z "${INTERNAL_PORT}" ]]; then
@@ -10,10 +7,9 @@ if [[ -z "${INTERNAL_PORT}" ]]; then
   export INTERNAL_PORT=5000
 fi
 
-python -m poetry install
-python -m debugpy --listen 0.0.0.0:5678 -m \
-  uvicorn \
+uvicorn \
+  --workers 1 \
+  --loop uvloop \
   --host 0.0.0.0 \
   --port "${INTERNAL_PORT}" \
-  --reload \
   "${ASGI_APP}"

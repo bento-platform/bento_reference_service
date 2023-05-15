@@ -19,11 +19,12 @@ RUN poetry install --without dev --no-root
 # (Don't use .dockerignore, which allows us to have development containers too)
 COPY bento_reference_service bento_reference_service
 COPY entrypoint.bash .
+COPY run.bash .
 COPY LICENSE .
 COPY README.md .
 
 # Install the module itself, locally (similar to `pip install -e .`)
 RUN poetry install --without dev
 
-ENTRYPOINT [ "bash", "./entrypoint.bash" ]
-CMD [ "bash", "./run.bash" ]
+CMD [ "bash", "./entrypoint.bash" ]
+ENTRYPOINT [ "bash", "./run.bash" ]

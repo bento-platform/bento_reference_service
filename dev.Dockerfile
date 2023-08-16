@@ -1,7 +1,7 @@
 FROM ghcr.io/bento-platform/bento_base_image:python-debian-2023.02.27
 
 # FastAPI uses uvicorn for a development server as well
-RUN source /env/bin/activate && pip install --upgrade pip && pip install --no-cache-dir "uvicorn[standard]==0.20.0"
+RUN source /env/bin/activate && pip install --upgrade pip && pip install --no-cache-dir "uvicorn[standard]==0.23.2"
 WORKDIR /reference
 
 COPY pyproject.toml .

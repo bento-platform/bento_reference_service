@@ -28,7 +28,7 @@ fastapi = "^0.101.1"
 pydantic = "^2.1.1"
 bento-lib = "^7.2.2"
 aiofiles = "^22.1.0"
-pysam = "^0.20.0"
+pysam = "^0.21.0"
 elasticsearch = {extras = ["async"], version = "^8.6.0"}
 jsonschema = "^4.17.3"
 pydantic-settings = "^2.0.3"

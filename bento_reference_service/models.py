@@ -1,7 +1,7 @@
 from pathlib import Path
 from pydantic import BaseModel
 
-from typing import List, TypedDict
+from typing import TypedDict
 
 __all__ = [
     "GTFFeature",
@@ -37,10 +37,8 @@ class Alias(BaseModel):
 
 
 class Contig(BaseModel):
-    genome: str
-
     name: str
-    aliases: List[Alias]
+    aliases: list[Alias]
 
     # checksums for sequence (content-based addressing)
     md5: str
@@ -50,10 +48,14 @@ class Contig(BaseModel):
     circular: bool
 
 
+class ContigWithRefgetURI(Contig):
+    refget: str
+
+
 class Genome(BaseModel):
     id: str
-    aliases: List[Alias]
-    uri: str
+    aliases: list[Alias]
+    # uri: str
 
     # checksums for FASTA
     md5: str
@@ -64,5 +66,9 @@ class Genome(BaseModel):
 
     # biological information
     taxon: OntologyTerm  # MUST be from NCBITaxon ontology - ingestion SHOULD validate this
-    contigs: List[Contig]
+    contigs: list[Contig]
 
+
+class GenomeWithURIs(Genome):
+    uri: str
+    contigs: list[ContigWithRefgetURI]

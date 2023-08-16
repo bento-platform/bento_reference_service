@@ -23,20 +23,21 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.8.1"
-fastapi = "^0.89.1"
-pydantic = "^1.10.4"
-bento-lib = "^5.4.0"
+python = "^3.10.0"
+fastapi = "^0.101.1"
+pydantic = "^2.1.1"
+bento-lib = "^7.2.2"
 aiofiles = "^22.1.0"
 pysam = "^0.20.0"
 elasticsearch = {extras = ["async"], version = "^8.6.0"}
 jsonschema = "^4.17.3"
+pydantic-settings = "^2.0.3"
 
 [tool.poetry.group.dev.dependencies]
 codecov = "^2.1.13"
 coverage = "^6.5.0"
-flake8 = "^6.0.0"
-pytest = "^7.2.0"
-pytest-cov = "^4.0.0"
-tox = "^4.2.8"
-debugpy = "^1.6.4"
+flake8 = "^6.1.0"
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+tox = "^4.9.0"
+debugpy = "^1.6.7.post1"

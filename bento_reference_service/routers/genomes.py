@@ -5,9 +5,11 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from typing import List, Optional
 
-from bento_reference_service import models
+from bento_reference_service import models as m
+from bento_reference_service.config import Config, ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
 from bento_reference_service.genomes import get_genomes
+from bento_reference_service.logger import LoggerDependency
 from bento_reference_service.utils import make_uri, get_genome_or_error
 
 
@@ -23,29 +25,29 @@ CHUNK_SIZE = 1024 * 16  # 16 KB at a time
 genome_router = APIRouter(prefix="/genomes")
 
 
-def contig_to_response(c: models.Contig) -> dict:
+def contig_to_response(c: m.Contig, config: Config) -> m.ContigWithRefgetURI:
+    return m.ContigWithRefgetURI.model_validate({
+        **c.model_dump(),
+        "refget": make_uri(f"/sequences/{c.trunc512}", config),
+    })
+
+
+def genome_contigs_response(g: m.Genome, config: Config) -> list[m.ContigWithRefgetURI]:
+    return [contig_to_response(c, config) for c in g.contigs]
+
+
+def genome_to_response(g: m.Genome, config: Config) -> dict:
     return {
-        **c.dict(),
-        "refget": make_uri(f"/sequences/{c.trunc512}"),
-    }
-
-
-def genome_contigs_response(g: models.Genome) -> List[dict]:
-    return [contig_to_response(c) for c in g.contigs]
-
-
-def genome_to_response(g: models.Genome) -> dict:
-    return {
-        **g.dict(exclude={"fasta", "fai"}),
-        "contigs": genome_contigs_response(g),
-        "fasta": make_uri(f"/genomes/{g.id}.fa"),
-        "fai": make_uri(f"/genomes/{g.id}.fa.fai"),
+        **g.model_dump(mode="json", exclude={"fasta", "fai"}),
+        "contigs": genome_contigs_response(g, config),
+        "fasta": make_uri(f"/genomes/{g.id}.fa", config),
+        "fai": make_uri(f"/genomes/{g.id}.fa.fai", config),
     }
 
 
 @genome_router.get("/genomes")
-async def genomes_list() -> List[dict]:
-    return [genome_to_response(g) async for g in get_genomes()]
+async def genomes_list(config: ConfigDependency, logger: LoggerDependency) -> list[dict]:
+    return [genome_to_response(g, config) async for g in get_genomes(config, logger)]
 
 
 # TODO: more normal genome creation endpoint
@@ -55,8 +57,8 @@ async def genomes_list() -> List[dict]:
 
 
 @genome_router.get("/genomes/{genome_id}.fa")
-async def genomes_detail_fasta(genome_id: str, request: Request):
-    genome: models.Genome = await get_genome_or_error(genome_id)
+async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request: Request):
+    genome: m.Genome = await get_genome_or_error(genome_id, config)
 
     # Don't use FastAPI's auto-Header tool for the Range header
     # 'cause I don't want to shadow Python's range() function
@@ -71,7 +73,7 @@ async def genomes_detail_fasta(genome_id: str, request: Request):
         raise exc_bad_range(range_header)
 
     start: int = 0
-    end: Optional[int] = None
+    end: int | None = None
 
     try:
         start = int(range_header_match.group(1))
@@ -86,12 +88,12 @@ async def genomes_detail_fasta(genome_id: str, request: Request):
             # Logic mostly ported from bento_drs
 
             # First, skip over <start> bytes to get to the beginning of the range
-            ff.seek(start)
+            await ff.seek(start)
 
             byte_offset: int = start
             while True:
                 # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
-                data = ff.read(min(CHUNK_SIZE, (end + 1 - byte_offset) if end is not None else CHUNK_SIZE))
+                data = await ff.read(min(CHUNK_SIZE, (end + 1 - byte_offset) if end is not None else CHUNK_SIZE))
                 byte_offset += len(data)
                 yield data
 
@@ -105,25 +107,25 @@ async def genomes_detail_fasta(genome_id: str, request: Request):
 
 
 @genome_router.get("/genomes/{genome_id}.fa.fai")
-async def genomes_detail_fasta_index(genome_id: str):
-    genome: models.Genome = await get_genome_or_error(genome_id)
+async def genomes_detail_fasta_index(genome_id: str, config: ConfigDependency):
+    genome: m.Genome = await get_genome_or_error(genome_id, config)
     return FileResponse(genome.fai, filename=f"{genome_id}.fa.fai")
 
 
 @genome_router.get("/genomes/{genome_id}")
-async def genomes_detail(genome_id: str):
-    return genome_to_response(await get_genome_or_error(genome_id))
+async def genomes_detail(genome_id: str, config: ConfigDependency):
+    return genome_to_response(await get_genome_or_error(genome_id, config), config)
 
 
 @genome_router.get("/genomes/{genome_id}/contigs")
-async def genomes_detail_contigs(genome_id: str):
-    return genome_contigs_response(await get_genome_or_error(genome_id))
+async def genomes_detail_contigs(genome_id: str, config: ConfigDependency):
+    return genome_contigs_response(await get_genome_or_error(genome_id, config), config)
 
 
 @genome_router.get("/genomes/{genome_id}/contigs/{contig_name}")
-async def genomes_detail_contig_detail(genome_id: str, contig_name: str):
+async def genomes_detail_contig_detail(genome_id: str, contig_name: str, config: ConfigDependency):
     # TODO: Use ES in front?
-    genome: models.Genome = await get_genome_or_error(genome_id)
+    genome: m.Genome = await get_genome_or_error(genome_id, config)
     raise NotImplementedError()
 
 

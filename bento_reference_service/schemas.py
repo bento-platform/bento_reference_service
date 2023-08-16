@@ -1,8 +1,7 @@
 from jsonschema import Draft202012Validator
-from typing import Dict, List, TypedDict
+from typing import TypedDict
 
-from bento_lib.search import queries as q
-from .config import config
+from .config import Config
 
 __all__ = [
     "schema_uri",
@@ -14,7 +13,7 @@ __all__ = [
 ]
 
 
-def schema_uri(path: str) -> str:
+def schema_uri(path: str, config: Config) -> str:
     return f"{config.service_url_base_path.rstrip('/')}/schemas/{path}"
 
 
@@ -23,37 +22,9 @@ TDJSONSchema = TypedDict("TDJSONSchema", {
     "$schema": str,
     "title": str,
     "type": str,
-    "properties": Dict[str, dict],
-    "required": List[str],
+    "properties": dict[str, dict],
+    "required": list[str],
 }, total=False)
-
-
-def search_optional_eq(order: int):
-    return {
-        "operations": [q.SEARCH_OP_EQ, q.SEARCH_OP_IN],
-        "queryable": "all",
-        "canNegate": True,
-        "required": False,
-        "order": order,
-        "type": "single",
-    }
-
-
-def search_optional_str(order: int):
-    return {
-        "operations": [
-            q.SEARCH_OP_EQ,
-            q.SEARCH_OP_ICO,
-            q.SEARCH_OP_IN,
-            q.SEARCH_OP_ISW,
-            q.SEARCH_OP_IEW,
-        ],
-        "queryable": "all",
-        "canNegate": True,
-        "required": False,
-        "order": order,
-        "type": "single",
-    }
 
 
 ONTOLOGY_TERM_SCHEMA: TDJSONSchema = {
@@ -64,11 +35,9 @@ ONTOLOGY_TERM_SCHEMA: TDJSONSchema = {
     "properties": {
         "id": {
             "type": "string",
-            "search": search_optional_eq(0),
         },
         "label": {
             "type": "string",
-            "search": search_optional_str(1),
         },
     },
     "required": ["id", "label"],
@@ -83,11 +52,9 @@ ALIAS_SCHEMA: TDJSONSchema = {
     "properties": {
         "alias": {
             "type": "string",
-            "search": search_optional_str(0),
         },
         "naming_authority": {
             "type": "string",
-            "search": search_optional_str(1),
         },
     },
     "required": ["alias", "naming_authority"],
@@ -102,7 +69,6 @@ CONTIG_SCHEMA: TDJSONSchema = {
     "properties": {
         "name": {
             "type": "string",
-            "search": search_optional_eq(0),
         },
         "aliases": {
             "type": "array",
@@ -111,11 +77,9 @@ CONTIG_SCHEMA: TDJSONSchema = {
         },
         "md5": {
             "type": "string",
-            "search": search_optional_eq(2),
         },
         "trunc512": {
             "type": "string",
-            "search": search_optional_eq(3),
         },
         "length": {"type": "integer", "minimum": 0},
     },
@@ -131,7 +95,6 @@ GENOME_METADATA_SCHEMA: TDJSONSchema = {
     "properties": {
         "id": {
             "type": "string",
-            "search": search_optional_eq(0),
         },
         "aliases": {
             "type": "array",
@@ -140,11 +103,9 @@ GENOME_METADATA_SCHEMA: TDJSONSchema = {
         },
         "md5": {
             "type": "string",
-            "search": search_optional_eq(2),
         },
         "trunc512": {
             "type": "string",
-            "search": search_optional_eq(3),
         },
         "taxon": {**ONTOLOGY_TERM_SCHEMA, "search": {"order": 4}},
         "contigs": {
@@ -160,7 +121,7 @@ GENOME_METADATA_SCHEMA: TDJSONSchema = {
 GENOME_METADATA_SCHEMA_VALIDATOR = Draft202012Validator(GENOME_METADATA_SCHEMA)
 
 
-SCHEMAS_BY_FILE_NAME: Dict[str, TDJSONSchema] = {
+SCHEMAS_BY_FILE_NAME: dict[str, TDJSONSchema] = {
     "ontology_term.json": ONTOLOGY_TERM_SCHEMA,
     "alias_schema.json": ALIAS_SCHEMA,
     "contig_schema.json": CONTIG_SCHEMA,

@@ -1,14 +1,16 @@
+import logging
+
 import pysam
 
+from elasticsearch import AsyncElasticsearch
 from fastapi import APIRouter, HTTPException, Request, Response
-from typing import Optional, Union
 
 from bento_reference_service import indices, models
-from bento_reference_service.config import config
+from bento_reference_service.config import Config, ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
-from bento_reference_service.es import es
+from bento_reference_service.es import ESDependency
 from bento_reference_service.genomes import get_genomes
-from bento_reference_service.logger import logger
+from bento_reference_service.logger import LoggerDependency
 from bento_reference_service.utils import get_genome_or_error
 
 
@@ -25,8 +27,16 @@ REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
 refget_router = APIRouter(prefix="/sequence")
 
 
-async def get_contig_by_checksum(checksum: str) -> Optional[models.Contig]:
-    es_resp = await es.search(index=indices.genome_index["name"], query={
+async def get_contig_by_checksum(
+    checksum: str,
+    # Dependencies
+    config: Config,
+    es: AsyncElasticsearch,
+    logger: logging.Logger,
+) -> models.Contig | None:
+    genome_index = indices.make_genome_index_def(config)
+
+    es_resp = await es.search(index=genome_index["name"], query={
         "nested": {
             "path": "contigs",
             "query": {
@@ -53,14 +63,14 @@ async def get_contig_by_checksum(checksum: str) -> Optional[models.Contig]:
 
         for sc in sg["contigs"]:
             if checksum in (sc["md5"], sc["trunc512"]):
-                return models.Contig(**sc)
+                return models.Contig.model_validate(sc)
 
         logger.error(f"Found ES hit for checksum {checksum} but could not find contig in inner hits")
 
     logger.debug(f"No hits in ES index for checksum {checksum}")
 
     # Manually iterate as a fallback
-    async for genome in get_genomes():
+    async for genome in get_genomes(config, logger):
         for sc in genome.contigs:
             if checksum in (sc.md5, sc.trunc512):
                 logger.warning(f"Found manual hit for {checksum}, but no corresponding entry in ES index")
@@ -71,27 +81,30 @@ async def get_contig_by_checksum(checksum: str) -> Optional[models.Contig]:
 
 @refget_router.get("/{sequence_checksum}")
 async def refget_sequence(
+    config: ConfigDependency,
+    es: ESDependency,
+    logger: LoggerDependency,
     request: Request,
     response: Response,
     sequence_checksum: str,
-    start: Union[int, None] = None,
-    end: Union[int, None] = None,
+    start: int | None = None,
+    end: int | None = None,
 ):
     response.headers["Content-Type"] = REFGET_HEADER_TEXT_WITH_CHARSET
 
-    accept_header: Optional[str] = request.headers.get("Accept", None)
+    accept_header: str | None = request.headers.get("Accept", None)
     if accept_header and accept_header not in (REFGET_HEADER_TEXT_WITH_CHARSET, REFGET_HEADER_TEXT, "text/plain"):
         raise HTTPException(status_code=406, detail="Not Acceptable")   # TODO: plain text error
 
     # Don't use FastAPI's auto-Header tool for the Range header
     # 'cause I don't want to shadow Python's range() function
-    range_header: Optional[str] = request.headers.get("Range", None)
+    range_header: str | None = request.headers.get("Range", None)
 
     if (start or end) and range_header:
         # TODO: Valid plain text error
         raise HTTPException(status_code=400, detail="cannot specify both start/end and Range header")
 
-    contig: Optional[models.Contig] = await get_contig_by_checksum(sequence_checksum)
+    contig: models.Contig | None = await get_contig_by_checksum(sequence_checksum, config, es, logger)
 
     start_final: int = 0  # 0-based, inclusive
     end_final: int = contig.length - 1  # 0-based, exclusive - need to adjust range (which is inclusive)
@@ -132,7 +145,7 @@ async def refget_sequence(
     if end_final - start_final > config.response_substring_limit:
         raise HTTPException(status_code=400, detail="request for too many bytes")  # TODO: what is real error?
 
-    genome = await get_genome_or_error(contig.genome)
+    genome = await get_genome_or_error(contig.genome, config)
 
     fa = pysam.FastaFile(filename=str(genome.fasta), filepath_index=str(genome.fai))
     try:
@@ -143,8 +156,14 @@ async def refget_sequence(
 
 
 @refget_router.get("/{sequence_checksum}/metadata")
-async def refget_sequence_metadata(response: Response, sequence_checksum: str) -> dict:  # TODO: type: refget resp
-    contig: Optional[models.Contig] = await get_contig_by_checksum(sequence_checksum)
+async def refget_sequence_metadata(
+    config: ConfigDependency,
+    es: ESDependency,
+    logger: LoggerDependency,
+    response: Response,
+    sequence_checksum: str,
+) -> dict:  # TODO: type: refget resp
+    contig: models.Contig | None = await get_contig_by_checksum(sequence_checksum, config, es, logger)
 
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
 
@@ -158,13 +177,13 @@ async def refget_sequence_metadata(response: Response, sequence_checksum: str) -
             "md5": contig.md5,
             "trunc512": contig.trunc512,
             "length": contig.length,
-            "aliases": [a.dict() for a in contig.aliases],
+            "aliases": [a.model_dump(mode="json") for a in contig.aliases],
         },
     }
 
 
 @refget_router.get("/service-info")
-async def refget_service_info(response: Response) -> dict:
+async def refget_service_info(config: ConfigDependency, response: Response) -> dict:
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
     return {
         "service": {

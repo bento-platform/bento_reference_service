@@ -1,8 +1,11 @@
+import json
+
 from fastapi import Depends
 from functools import lru_cache
 from pathlib import Path
-from pydantic_settings import BaseSettings
-from typing import Annotated
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings, EnvSettingsSource, PydanticBaseSettingsSource
+from typing import Annotated, Any
 
 from .constants import SERVICE_GROUP, SERVICE_ARTIFACT
 
@@ -11,6 +14,13 @@ __all__ = [
     "get_config",
     "ConfigDependency",
 ]
+
+
+class CorsOriginsParsingSource(EnvSettingsSource):
+    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+        if field_name == "cors_origins":
+            return tuple(x.strip() for x in value.split(";"))
+        return json.loads(value) if value_is_complex else value
 
 
 class Config(BaseSettings):
@@ -23,6 +33,19 @@ class Config(BaseSettings):
 
     # /service-info customization
     service_contact_url: str = "mailto:info@c3g.ca"
+
+    cors_origins: tuple[str, ...] = ("*",)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (CorsOriginsParsingSource(settings_cls),)
 
 
 @lru_cache()

@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir "uvicorn[standard]==0.20.0"
 WORKDIR /reference
 
 COPY pyproject.toml .
-COPY poetry.toml .
 COPY poetry.lock .
 
 # Install production dependencies

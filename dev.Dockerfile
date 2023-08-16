@@ -5,7 +5,6 @@ RUN source /env/bin/activate && pip install --upgrade pip && pip install --no-ca
 WORKDIR /reference
 
 COPY pyproject.toml .
-COPY poetry.toml .
 COPY poetry.lock .
 
 COPY entrypoint.bash .

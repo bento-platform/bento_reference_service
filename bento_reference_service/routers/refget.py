@@ -36,21 +36,24 @@ async def get_contig_by_checksum(
 ) -> models.Contig | None:
     genome_index = indices.make_genome_index_def(config)
 
-    es_resp = await es.search(index=genome_index["name"], query={
-        "nested": {
-            "path": "contigs",
-            "query": {
-                "bool": {
-                    "should": [
-                        {"match": {"contigs.md5": checksum}},
-                        {"match": {"contigs.trunc512": checksum}},
-                    ],
+    es_resp = await es.search(
+        index=genome_index["name"],
+        query={
+            "nested": {
+                "path": "contigs",
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"match": {"contigs.md5": checksum}},
+                            {"match": {"contigs.trunc512": checksum}},
+                        ],
+                    },
                 },
+                "inner_hits": {},
+                "score_mode": "max",  # We are interested in the
             },
-            "inner_hits": {},
-            "score_mode": "max",  # We are interested in the
         },
-    })
+    )
 
     if es_resp["hits"]["total"]["value"] > 0:
         # Use ES result, since we got a hit
@@ -93,8 +96,12 @@ async def refget_sequence(
     response.headers["Content-Type"] = REFGET_HEADER_TEXT_WITH_CHARSET
 
     accept_header: str | None = request.headers.get("Accept", None)
-    if accept_header and accept_header not in (REFGET_HEADER_TEXT_WITH_CHARSET, REFGET_HEADER_TEXT, "text/plain"):
-        raise HTTPException(status_code=406, detail="Not Acceptable")   # TODO: plain text error
+    if accept_header and accept_header not in (
+        REFGET_HEADER_TEXT_WITH_CHARSET,
+        REFGET_HEADER_TEXT,
+        "text/plain",
+    ):
+        raise HTTPException(status_code=406, detail="Not Acceptable")  # TODO: plain text error
 
     # Don't use FastAPI's auto-Header tool for the Range header
     # 'cause I don't want to shadow Python's range() function
@@ -140,7 +147,10 @@ async def refget_sequence(
 
     if contig is None:
         # TODO: proper 404 for refget spec
-        raise HTTPException(status_code=404, detail=f"sequence not found with checksum: {sequence_checksum}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"sequence not found with checksum: {sequence_checksum}",
+        )
 
     if end_final - start_final > config.response_substring_limit:
         raise HTTPException(status_code=400, detail="request for too many bytes")  # TODO: what is real error?
@@ -170,7 +180,10 @@ async def refget_sequence_metadata(
     if contig is None:
         # TODO: proper 404 for refget spec
         # TODO: proper content type for exception - RefGet error class?
-        raise HTTPException(status_code=404, detail=f"sequence not found with checksum: {sequence_checksum}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"sequence not found with checksum: {sequence_checksum}",
+        )
 
     return {
         "metadata": {
@@ -189,11 +202,9 @@ async def refget_service_info(config: ConfigDependency, response: Response) -> d
         "service": {
             "circular_supported": False,
             "algorithms": ["md5", "trunc512"],
-
             # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
             # It's a substring!
             "subsequence_limit": config.response_substring_limit,
-
             "supported_api_versions": ["1.0"],
         }
     }

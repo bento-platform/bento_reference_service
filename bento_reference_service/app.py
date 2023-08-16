@@ -2,7 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError, StarletteHTTPException
 
-from bento_lib.responses.fastapi_errors import http_exception_handler_factory, validation_exception_handler_factory
+from bento_lib.responses.fastapi_errors import (
+    http_exception_handler_factory,
+    validation_exception_handler_factory,
+)
 
 from . import __version__
 from .authz import authz_middleware
@@ -42,7 +45,8 @@ app.add_middleware(
 authz_middleware.attach(app)
 
 app.exception_handler(StarletteHTTPException)(
-    http_exception_handler_factory(get_logger(config_for_setup), authz_middleware))
+    http_exception_handler_factory(get_logger(config_for_setup), authz_middleware)
+)
 app.exception_handler(RequestValidationError)(validation_exception_handler_factory(authz_middleware))
 
 
@@ -53,10 +57,7 @@ async def service_info(config: ConfigDependency):
         "name": config.service_name,  # TODO: Should be globally unique?
         "type": SERVICE_TYPE,
         "description": "Reference data (genomes & annotations) service for the Bento platform.",
-        "organization": {
-            "name": "C3G",
-            "url": "https://www.computationalgenomics.ca"
-        },
+        "organization": {"name": "C3G", "url": "https://www.computationalgenomics.ca"},
         "contactUrl": config.service_contact_url,
         "version": __version__,
         "environment": "prod",

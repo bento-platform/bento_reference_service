@@ -24,10 +24,12 @@ genome_router = APIRouter(prefix="/genomes")
 
 
 def contig_to_response(c: m.Contig, config: Config) -> m.ContigWithRefgetURI:
-    return m.ContigWithRefgetURI.model_validate({
-        **c.model_dump(),
-        "refget": make_uri(f"/sequences/{c.trunc512}", config),
-    })
+    return m.ContigWithRefgetURI.model_validate(
+        {
+            **c.model_dump(),
+            "refget": make_uri(f"/sequences/{c.trunc512}", config),
+        }
+    )
 
 
 def genome_contigs_response(g: m.Genome, config: Config) -> list[m.ContigWithRefgetURI]:
@@ -91,7 +93,12 @@ async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request
             byte_offset: int = start
             while True:
                 # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
-                data = await ff.read(min(CHUNK_SIZE, (end + 1 - byte_offset) if end is not None else CHUNK_SIZE))
+                data = await ff.read(
+                    min(
+                        CHUNK_SIZE,
+                        (end + 1 - byte_offset) if end is not None else CHUNK_SIZE,
+                    )
+                )
                 byte_offset += len(data)
                 yield data
 
@@ -101,7 +108,11 @@ async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request
                 if not data or (end is not None and byte_offset > end):
                     break
 
-    return StreamingResponse(stream_file(), media_type="text/x-fasta", status_code=206 if range_header else 200)
+    return StreamingResponse(
+        stream_file(),
+        media_type="text/x-fasta",
+        status_code=206 if range_header else 200,
+    )
 
 
 @genome_router.get("/genomes/{genome_id}.fa.fai")

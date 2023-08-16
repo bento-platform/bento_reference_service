@@ -17,14 +17,18 @@ def schema_uri(path: str, config: Config) -> str:
     return f"{config.service_url_base_path.rstrip('/')}/schemas/{path}"
 
 
-TDJSONSchema = TypedDict("TDJSONSchema", {
-    "$id": str,
-    "$schema": str,
-    "title": str,
-    "type": str,
-    "properties": dict[str, dict],
-    "required": list[str],
-}, total=False)
+TDJSONSchema = TypedDict(
+    "TDJSONSchema",
+    {
+        "$id": str,
+        "$schema": str,
+        "title": str,
+        "type": str,
+        "properties": dict[str, dict],
+        "required": list[str],
+    },
+    total=False,
+)
 
 
 ONTOLOGY_TERM_SCHEMA: TDJSONSchema = {

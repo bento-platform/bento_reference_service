@@ -162,10 +162,16 @@ async def ingest_gene_feature_annotation(
                     elif feature_type == "transcript":
                         feature_id = record.transcript_id
                         feature_name = feature_id  # Explicitly re-use ID as name here
-                    elif feature_type in ("5UTR", "five_prime_utr"):  # 5' untranslated region (UTR)
+                    elif feature_type in (
+                        "5UTR",
+                        "five_prime_utr",
+                    ):  # 5' untranslated region (UTR)
                         feature_id = f"{gene_id}-5UTR"
                         feature_name = f"{gene_name} 5' UTR"
-                    elif feature_type in ("3UTR", "five_prime_utr"):  # 3' untranslated region (UTR)
+                    elif feature_type in (
+                        "3UTR",
+                        "five_prime_utr",
+                    ):  # 3' untranslated region (UTR)
                         feature_id = f"{gene_id}-3UTR"
                         feature_name = f"{gene_name} 3' UTR"
                     elif feature_type == "start_codon":  # TODO: multiple start codons may exist?
@@ -221,10 +227,12 @@ async def ingest_gene_feature_annotation(
 
 
 def contig_with_refget_uri(contig: m.Contig, config: Config) -> m.ContigWithRefgetURI:
-    return m.ContigWithRefgetURI.model_validate({
-        **contig.model_dump(),
-        "refget": make_uri(f"/sequences/{contig.trunc512}", config),
-    })
+    return m.ContigWithRefgetURI.model_validate(
+        {
+            **contig.model_dump(),
+            "refget": make_uri(f"/sequences/{contig.trunc512}", config),
+        }
+    )
 
 
 async def get_genome(genome: Path, config: Config) -> m.Genome:
@@ -260,11 +268,13 @@ async def get_genome(genome: Path, config: Config) -> m.Genome:
     finally:
         fa.close()
 
-    return m.GenomeWithURIs.model_validate({
-        **genome.model_dump(),
-        "uri": make_uri(f"/genomes/{id_}", config),
-        "contigs": contigs,
-    })
+    return m.GenomeWithURIs.model_validate(
+        {
+            **genome.model_dump(),
+            "uri": make_uri(f"/genomes/{id_}", config),
+            "contigs": contigs,
+        }
+    )
 
 
 async def get_genomes(config: Config, logger: logging.Logger) -> Generator[m.Genome, None, None]:

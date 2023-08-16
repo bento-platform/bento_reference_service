@@ -61,14 +61,16 @@ def make_gene_feature_index_def(config: Config) -> BentoESIndex:
         mappings={
             # ID for the type - if none is available, this is synthesized from the gene–id + '-' + type
             #  - (KIR3DL3 + 5UTR --> KIR3DL3-5UTR)
-            "id": {"type": "text", "analyzer": "standard"},  # gene_id or transcript_id or exon_id from attributes list
+            "id": {
+                "type": "text",
+                "analyzer": "standard",
+            },  # gene_id or transcript_id or exon_id from attributes list
             # name (or ID if name is not available for the item)
             #  - if no name or ID is available for this type, name is set to gene_name + ' ' + human-readable type name
             #    (5UTR for KIR3DL3 --> KIR3DL3 5' UTR)
             "name": {"type": "search_as_you_type"},
             # contig:start-end - turn into searchable text
             "position": {"type": "text", "analyzer": "standard"},
-
             "type": {"type": "keyword"},  # feature type - gene/exon/transcript/5UTR/3UTR/...
             "genome": {"type": "keyword"},  # genome ID
             "strand": {"type": "keyword"},  # strand + or - TODO

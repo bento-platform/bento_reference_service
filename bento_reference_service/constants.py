@@ -6,7 +6,6 @@ __all__ = [
     "SERVICE_GROUP",
     "SERVICE_ARTIFACT",
     "SERVICE_TYPE",
-
     "RANGE_HEADER_PATTERN",
 ]
 

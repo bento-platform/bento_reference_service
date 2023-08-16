@@ -4,7 +4,11 @@ from fastapi import Depends
 from functools import lru_cache
 from pathlib import Path
 from pydantic.fields import FieldInfo
-from pydantic_settings import BaseSettings, EnvSettingsSource, PydanticBaseSettingsSource
+from pydantic_settings import (
+    BaseSettings,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+)
 from typing import Annotated, Any
 
 from .constants import SERVICE_GROUP, SERVICE_ARTIFACT

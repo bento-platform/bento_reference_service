@@ -3,8 +3,6 @@ import aiofiles
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
-from typing import List, Optional
-
 from bento_reference_service import models as m
 from bento_reference_service.config import Config, ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
@@ -62,7 +60,7 @@ async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request
 
     # Don't use FastAPI's auto-Header tool for the Range header
     # 'cause I don't want to shadow Python's range() function
-    range_header: Optional[str] = request.headers.get("Range", None)
+    range_header: str | None = request.headers.get("Range", None)
 
     if range_header is None:
         # TODO: send the file if no range header and the FASTA is below some response size limit

@@ -116,6 +116,52 @@ async def ingest_genome(bento_genome_path: Path, config: Config, es: AsyncElasti
     return genome
 
 
+def extract_feature_id_and_name(record) -> tuple[str | None, str | None]:
+    feature_type = record.feature
+    gene_id = record.gene_id
+    gene_name = record.attributes.get("gene_name", gene_id)
+
+    feature_id: str | None = None
+    feature_name: str | None = None
+
+    match feature_type:
+        case "gene":
+            feature_id = gene_id
+            feature_name = gene_name
+        case "transcript":
+            feature_id = record.transcript_id
+            feature_name = feature_id  # Explicitly re-use ID as name here
+        case "5UTR" | "five_prime_utr":  # 5' untranslated region (UTR)
+            feature_id = f"{gene_id}-5UTR"
+            feature_name = f"{gene_name} 5' UTR"
+        case "3UTR" | "three_prime_utr":  # 3' untranslated region (UTR)
+            feature_id = f"{gene_id}-3UTR"
+            feature_name = f"{gene_name} 3' UTR"
+        case "start_codon":  # TODO: multiple start codons may exist?
+            feature_id = f"{gene_id}-start_codon"
+            feature_name = f"{gene_name} start codon"
+        case "stop_codon":  # TODO: multiple stop codons may exist?
+            feature_id = f"{gene_id}-stop_codon"
+            feature_name = f"{gene_name} stop codon"
+        case "exon":
+            feature_id = record.attributes["exon_id"]  # TODO: fallback with gene ID + exon number?
+            if "exon_number" in record.attributes:
+                # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
+                feature_name = f"{gene_name} exon {record.attributes['exon_number']}"
+            else:
+                feature_name = feature_id  # Explicitly re-use ID as name here
+        case "CDS":  # coding sequence
+            exon_id = record.attributes["exon_id"]
+            feature_id = f"{exon_id}-CDS"
+            if "exon_number" in record.attributes:
+                # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
+                feature_name = f"{gene_name} exon {record.attributes['exon_number']} CDS"
+            else:
+                feature_name = f"{exon_id} CDS"  # Explicitly re-use ID as name here
+
+    return feature_id, feature_name
+
+
 async def ingest_gene_feature_annotation(
     genome_id: str,
     gtf_annotation_path: Path,
@@ -153,51 +199,7 @@ async def ingest_gene_feature_annotation(
 
                 for record in gtf.fetch(contig.name, parser=pysam.asGTF()):
                     feature_type = record.feature
-                    gene_id = record.gene_id
-                    gene_name = record.attributes.get("gene_name", gene_id)
-
-                    feature_id: str | None = None
-                    feature_name: str | None = None
-
-                    if feature_type == "gene":
-                        feature_id = gene_id
-                        feature_name = gene_name
-                    elif feature_type == "transcript":
-                        feature_id = record.transcript_id
-                        feature_name = feature_id  # Explicitly re-use ID as name here
-                    elif feature_type in (
-                        "5UTR",
-                        "five_prime_utr",
-                    ):  # 5' untranslated region (UTR)
-                        feature_id = f"{gene_id}-5UTR"
-                        feature_name = f"{gene_name} 5' UTR"
-                    elif feature_type in (
-                        "3UTR",
-                        "five_prime_utr",
-                    ):  # 3' untranslated region (UTR)
-                        feature_id = f"{gene_id}-3UTR"
-                        feature_name = f"{gene_name} 3' UTR"
-                    elif feature_type == "start_codon":  # TODO: multiple start codons may exist?
-                        feature_id = f"{gene_id}-start_codon"
-                        feature_name = f"{gene_name} start codon"
-                    elif feature_type == "stop_codon":  # TODO: multiple stop codons may exist?
-                        feature_id = f"{gene_id}-stop_codon"
-                        feature_name = f"{gene_name} stop codon"
-                    elif feature_type == "exon":
-                        feature_id = record.attributes["exon_id"]  # TODO: fallback with gene ID + exon number?
-                        if "exon_number" in record.attributes:
-                            # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
-                            feature_name = f"{gene_name} exon {record.attributes['exon_number']}"
-                        else:
-                            feature_name = feature_id  # Explicitly re-use ID as name here
-                    elif feature_type == "CDS":  # coding sequence
-                        exon_id = record.attributes["exon_id"]
-                        feature_id = f"{exon_id}-CDS"
-                        if "exon_number" in record.attributes:
-                            # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
-                            feature_name = f"{gene_name} exon {record.attributes['exon_number']} CDS"
-                        else:
-                            feature_name = f"{exon_id} CDS"  # Explicitly re-use ID as name here
+                    feature_id, feature_name = extract_feature_id_and_name(record)
 
                     if feature_id is None:
                         logger.warning(f"Skipping unsupported feature (type={feature_type}, no ID retrieval): {record}")
@@ -211,9 +213,9 @@ async def ingest_gene_feature_annotation(
                         "id": feature_id,
                         "name": feature_name,
                         "position": f"{contig.name}:{record.start}-{record.end}",
-                        "type": record["feature"],
+                        "type": feature_type,
                         "genome": genome_id,
-                        "strand": record["strand"],
+                        "strand": record.strand,
                     }
 
                 total_processed += 1

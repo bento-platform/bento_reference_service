@@ -9,9 +9,8 @@ from bento_reference_service import indices, models
 from bento_reference_service.config import Config, ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
 from bento_reference_service.es import ESDependency
-from bento_reference_service.genomes import get_genomes_with_uris
+from bento_reference_service.genomes import get_genomes_with_uris, get_genome_or_error
 from bento_reference_service.logger import LoggerDependency
-from bento_reference_service.utils import get_genome_or_error
 
 
 __all__ = [

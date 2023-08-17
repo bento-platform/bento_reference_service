@@ -6,7 +6,7 @@ import re
 
 from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_streaming_bulk
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from pathlib import Path
 from typing import Generator
 
@@ -258,30 +258,27 @@ async def get_genome(genome_path: Path, config: Config) -> m.Genome:
     return genome
 
 
-async def get_genome_with_uris(genome_path: Path, config: Config):
+async def get_genome_with_uris(genome_path: Path, config: Config) -> m.GenomeWithURIs:
     genome = await get_genome(genome_path, config)
-
     contigs: list[m.ContigWithRefgetURI] = [contig_with_refget_uri(contig, config) for contig in genome.contigs]
-
-    id_ = genome.id
+    genome_uri_path = f"/genomes/{genome.id}"
     return m.GenomeWithURIs.model_validate(
         {
             **genome.model_dump(),
             "contigs": contigs,
-            "uri": make_uri(f"/genomes/{id_}", config),
-            "fasta": make_uri(f"/genomes/{id_}.fa", config),
-            "fai": make_uri(f"/genomes/{id_}.fa.fai", config),
+            "uri": make_uri(genome_uri_path, config),
+            "fasta": make_uri(f"{genome_uri_path}.fa", config),
+            "fai": make_uri(f"{genome_uri_path}.fa.fai", config),
         }
     )
 
 
-def make_and_check_genome_path(genome_id: str, config: Config):
-    genome_path = make_genome_path(genome_id, config)
+def make_and_check_genome_path(genome_id: str, config: Config) -> Path:
+    if (genome_path := make_genome_path(genome_id, config)).exists():
+        return genome_path
 
-    if not genome_path.exists():
-        raise HTTPException(status_code=404, detail=f"genome not found: {genome_id}")
-
-    return genome_path
+    # Otherwise 404
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"genome not found: {genome_id}")
 
 
 async def get_genome_or_error(genome_id: str, config: Config) -> m.Genome:

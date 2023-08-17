@@ -1,14 +1,13 @@
 import aiofiles
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
 
 from bento_reference_service import models as m
-from bento_reference_service.config import Config, ConfigDependency
+from bento_reference_service.config import ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
-from bento_reference_service.genomes import get_genomes
+from bento_reference_service.genomes import get_genome_or_error, get_genome_with_uris_or_error, get_genomes_with_uris
 from bento_reference_service.logger import LoggerDependency
-from bento_reference_service.utils import make_uri, get_genome_or_error
 
 
 __all__ = ["genome_router"]
@@ -23,31 +22,9 @@ CHUNK_SIZE = 1024 * 16  # 16 KB at a time
 genome_router = APIRouter(prefix="/genomes")
 
 
-def contig_to_response(c: m.Contig, config: Config) -> m.ContigWithRefgetURI:
-    return m.ContigWithRefgetURI.model_validate(
-        {
-            **c.model_dump(),
-            "refget": make_uri(f"/sequences/{c.trunc512}", config),
-        }
-    )
-
-
-def genome_contigs_response(g: m.Genome, config: Config) -> list[m.ContigWithRefgetURI]:
-    return [contig_to_response(c, config) for c in g.contigs]
-
-
-def genome_to_response(g: m.Genome, config: Config) -> dict:
-    return {
-        **g.model_dump(mode="json", exclude={"fasta", "fai"}),
-        "contigs": genome_contigs_response(g, config),
-        "fasta": make_uri(f"/genomes/{g.id}.fa", config),
-        "fai": make_uri(f"/genomes/{g.id}.fa.fai", config),
-    }
-
-
 @genome_router.get("/genomes")
-async def genomes_list(config: ConfigDependency, logger: LoggerDependency) -> list[dict]:
-    return [genome_to_response(g, config) async for g in get_genomes(config, logger)]
+async def genomes_list(config: ConfigDependency, logger: LoggerDependency) -> list[m.GenomeWithURIs]:
+    return [g async for g in get_genomes_with_uris(config, logger)]
 
 
 # TODO: more normal genome creation endpoint
@@ -57,7 +34,7 @@ async def genomes_list(config: ConfigDependency, logger: LoggerDependency) -> li
 
 
 @genome_router.get("/genomes/{genome_id}.fa")
-async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request: Request):
+async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request: Request) -> StreamingResponse:
     genome: m.Genome = await get_genome_or_error(genome_id, config)
 
     # Don't use FastAPI's auto-Header tool for the Range header
@@ -116,26 +93,37 @@ async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request
 
 
 @genome_router.get("/genomes/{genome_id}.fa.fai")
-async def genomes_detail_fasta_index(genome_id: str, config: ConfigDependency):
+async def genomes_detail_fasta_index(genome_id: str, config: ConfigDependency) -> FileResponse:
     genome: m.Genome = await get_genome_or_error(genome_id, config)
     return FileResponse(genome.fai, filename=f"{genome_id}.fa.fai")
 
 
 @genome_router.get("/genomes/{genome_id}")
-async def genomes_detail(genome_id: str, config: ConfigDependency):
-    return genome_to_response(await get_genome_or_error(genome_id, config), config)
+async def genomes_detail(genome_id: str, config: ConfigDependency) -> m.GenomeWithURIs:
+    return await get_genome_with_uris_or_error(genome_id, config)
 
 
 @genome_router.get("/genomes/{genome_id}/contigs")
-async def genomes_detail_contigs(genome_id: str, config: ConfigDependency):
-    return genome_contigs_response(await get_genome_or_error(genome_id, config), config)
+async def genomes_detail_contigs(genome_id: str, config: ConfigDependency) -> list[m.ContigWithRefgetURI]:
+    return (await get_genome_with_uris_or_error(genome_id, config)).contigs
 
 
 @genome_router.get("/genomes/{genome_id}/contigs/{contig_name}")
-async def genomes_detail_contig_detail(genome_id: str, contig_name: str, config: ConfigDependency):
+async def genomes_detail_contig_detail(
+    genome_id: str, contig_name: str, config: ConfigDependency
+) -> m.ContigWithRefgetURI:
     # TODO: Use ES in front?
-    genome: m.Genome = await get_genome_or_error(genome_id, config)
-    raise NotImplementedError()
+
+    genome: m.GenomeWithURIs = await get_genome_with_uris_or_error(genome_id, config)
+    contig: m.ContigWithRefgetURI | None = next((c for c in genome.contigs if c.name == contig_name), None)
+
+    if contig is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Contig with name {contig_name} not found in genome with ID {genome_id}",
+        )
+
+    return contig
 
 
 @genome_router.get("/genomes/{genome_id}/gene_features.gtf.gz")

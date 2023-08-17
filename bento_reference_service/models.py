@@ -71,4 +71,7 @@ class Genome(BaseModel):
 
 class GenomeWithURIs(Genome):
     uri: str
+    # Overrides
+    fasta: str  # URI
+    fai: str  # URI
     contigs: list[ContigWithRefgetURI]

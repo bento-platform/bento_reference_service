@@ -9,7 +9,7 @@ from bento_reference_service import indices, models
 from bento_reference_service.config import Config, ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
 from bento_reference_service.es import ESDependency
-from bento_reference_service.genomes import get_genomes
+from bento_reference_service.genomes import get_genomes_with_uris
 from bento_reference_service.logger import LoggerDependency
 from bento_reference_service.utils import get_genome_or_error
 
@@ -73,7 +73,7 @@ async def get_contig_by_checksum(
     logger.debug(f"No hits in ES index for checksum {checksum}")
 
     # Manually iterate as a fallback
-    async for genome in get_genomes(config, logger):
+    async for genome in get_genomes_with_uris(config, logger):
         for sc in genome.contigs:
             if checksum in (sc.md5, sc.trunc512):
                 logger.warning(f"Found manual hit for {checksum}, but no corresponding entry in ES index")

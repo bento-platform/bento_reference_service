@@ -1,20 +1,19 @@
 import aiofiles
 import asyncio
-import json
-import jsonschema
 import logging
 import pysam
 import re
 
 from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_streaming_bulk
+from fastapi import HTTPException
 from pathlib import Path
 from typing import Generator
 
 from . import models as m
 from .config import Config
 from .es import ESDependency
-from .schemas import GENOME_METADATA_SCHEMA_VALIDATOR
+from .indices import make_genome_index_def
 from .utils import make_uri
 
 __all__ = [
@@ -22,7 +21,10 @@ __all__ = [
     "ingest_genome",
     "ingest_gene_feature_annotation",
     "get_genome",
-    "get_genomes",
+    "get_genome_or_error",
+    "get_genome_with_uris",
+    "get_genome_with_uris_or_error",
+    "get_genomes_with_uris",
 ]
 
 
@@ -63,39 +65,35 @@ def check_genome_file_existence(required_files: tuple[Path, ...]) -> None:
             raise GenomeFormatError(f"{required_file} should not be a directory")
 
 
-async def ingest_genome(bento_genome_path: Path, config: Config, es: AsyncElasticsearch) -> None:
+def get_genome_paths_and_check(genome_path: Path) -> tuple[Path, Path, Path]:
+    genome_paths = get_genome_paths(genome_path)
+
+    # Raise errors with genomes which are missing a required file
+    check_genome_file_existence(genome_paths)
+
+    return genome_paths
+
+
+async def ingest_genome(bento_genome_path: Path, config: Config, es: AsyncElasticsearch) -> m.Genome:
     """
     Given an external directory following the ".bentoGenome" directory specification, this function validates the format
     and copies the directory into the local data folder.
     :param bento_genome_path: The path to the .bentoGenome directory.
     :param config: Service configuration object.
     :param es: Async Elasticsearch connection.
-    :return: None
+    :return: The created genome object
     """
 
     if not bento_genome_path.is_dir():
         raise GenomeFormatError(f"{bento_genome_path} is not a directory")
 
-    genome_paths = get_genome_paths(bento_genome_path)
-
-    # Check required file existence
-    check_genome_file_existence(genome_paths)
-
-    metadata_path, sequence_path, sequence_index_path = genome_paths
+    metadata_path, sequence_path, sequence_index_path = get_genome_paths_and_check(bento_genome_path)
 
     # Read ID from metadata.json
     async with aiofiles.open(metadata_path, "r") as mf:
-        genome_metadata = json.loads(await mf.read())
+        genome = m.Genome.model_validate_json(await mf.read())
 
-    # Validate the metadata JSON before we try to use the data
-    try:
-        GENOME_METADATA_SCHEMA_VALIDATOR.validate(genome_metadata)
-    except jsonschema.exceptions.ValidationError:  # TODO: as e --> use for errors
-        # TODO: details
-        # TODO: logging
-        raise GenomeFormatError("invalid metadata JSON")
-
-    id_ = genome_metadata["id"]
+    id_ = genome.id
 
     # Check if the genome ID is valid - ensures no funky file names
     if not VALID_GENOME_ID.match(id_):
@@ -112,7 +110,10 @@ async def ingest_genome(bento_genome_path: Path, config: Config, es: AsyncElasti
         raise GenomeFormatError(f"on copy, got non-0 return code {rc} (stdout={stdout}, stderr={stderr})")
 
     # Index the genome in ES - it may not be available immediately
-    await es.create(index=genome_index["name"], document=genome_metadata)
+    genome_index = make_genome_index_def(config)
+    await es.create(index=genome_index["name"], document=genome.model_dump(mode="json"))
+
+    return genome
 
 
 async def ingest_gene_feature_annotation(
@@ -120,6 +121,7 @@ async def ingest_gene_feature_annotation(
     gtf_annotation_path: Path,
     gtf_annotation_index_path: Path,
     config: Config,
+    es: ESDependency,
     logger: logging.Logger,
 ) -> None:
     """
@@ -130,6 +132,7 @@ async def ingest_gene_feature_annotation(
     :param gtf_annotation_path: The path to an external GTF.gz-formatted annotation file to copy and read from.
     :param gtf_annotation_index_path: The path to an external index file for the above .gtf.gz.
     :param config: Service configuration object.
+    :param es: Async Elasticsearch connection.
     :param logger: Python logger object.
     :return: None
     """
@@ -235,52 +238,66 @@ def contig_with_refget_uri(contig: m.Contig, config: Config) -> m.ContigWithRefg
     )
 
 
-async def get_genome(genome: Path, config: Config) -> m.Genome:
-    if not genome.is_dir():
+async def get_genome(genome_path: Path, config: Config) -> m.Genome:
+    if not genome_path.is_dir():
         raise GenomeFormatError("not a directory")
 
-    if not genome.parent.absolute().resolve() == config.data_path.absolute().resolve():
+    if not genome_path.parent.absolute().resolve() == config.data_path.absolute().resolve():
         raise GenomeFormatError("invalid location")
 
-    genome_paths = get_genome_paths(genome)
-
     # Raise errors with genomes which are missing a required file
-    check_genome_file_existence(genome_paths)
-
-    metadata_path, sequence_path, sequence_index_path = genome_paths
+    metadata_path, _, _ = get_genome_paths_and_check(genome_path)
 
     async with aiofiles.open(metadata_path, "r") as mf:
         genome: m.Genome = m.Genome.model_validate_json(await mf.read())
 
-    id_ = genome.id
-
     # Error on genomes where the directory name != the ID specified in metadata.json, plus .bentoGenome as a suffix
-    if genome.name != (correct_name := make_genome_dir_name(id_)):
+    if genome.name != (correct_name := make_genome_dir_name(genome.id)):
         raise GenomeFormatError(f"mismatch between directory name ({genome}) and ID-derived name ({correct_name})")
 
-    # Extract contigs from the FASTA file, and tag them with the checksums provided in the metadata JSON
-    fa = pysam.FastaFile(str(sequence_path), filepath_index=str(sequence_index_path))
-    try:
-        gm_contigs_by_name: dict[str, m.Contig] = {gmc["name"]: gmc for gmc in genome.contigs}
-        contigs: list[m.ContigWithRefgetURI] = [
-            contig_with_refget_uri(gm_contigs_by_name[contig], config) for contig in fa.references
-        ]
-    finally:
-        fa.close()
+    return genome
 
+
+async def get_genome_with_uris(genome_path: Path, config: Config):
+    genome = await get_genome(genome_path, config)
+
+    contigs: list[m.ContigWithRefgetURI] = [contig_with_refget_uri(contig, config) for contig in genome.contigs]
+
+    id_ = genome.id
     return m.GenomeWithURIs.model_validate(
         {
             **genome.model_dump(),
-            "uri": make_uri(f"/genomes/{id_}", config),
             "contigs": contigs,
+            "uri": make_uri(f"/genomes/{id_}", config),
+            "fasta": make_uri(f"/genomes/{id_}.fa", config),
+            "fai": make_uri(f"/genomes/{id_}.fa.fai", config),
         }
     )
 
 
-async def get_genomes(config: Config, logger: logging.Logger) -> Generator[m.Genome, None, None]:
+def make_and_check_genome_path(genome_id: str, config: Config):
+    genome_path = make_genome_path(genome_id, config)
+
+    if not genome_path.exists():
+        raise HTTPException(status_code=404, detail=f"genome not found: {genome_id}")
+
+    return genome_path
+
+
+async def get_genome_or_error(genome_id: str, config: Config) -> m.Genome:
+    # TODO: handle format errors with 500
+    return await get_genome(make_and_check_genome_path(genome_id, config), config)
+
+
+async def get_genome_with_uris_or_error(genome_id: str, config: Config) -> m.GenomeWithURIs:
+    # TODO: handle format errors with 500
+    return await get_genome_with_uris(make_and_check_genome_path(genome_id, config), config)
+
+
+async def get_genomes_with_uris(config: Config, logger: logging.Logger) -> Generator[m.GenomeWithURIs, None, None]:
     for genome in config.data_path.glob("*.bentoGenome"):
         try:
-            yield await get_genome(genome, config)
+            yield await get_genome_with_uris(genome, config)
         except GenomeFormatError as e:
             logger.error(f"Skipping {genome}: {e}")
             continue

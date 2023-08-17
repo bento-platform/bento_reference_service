@@ -14,7 +14,7 @@ __all__ = ["genome_router"]
 
 
 def exc_bad_range(range_header: str) -> HTTPException:
-    return HTTPException(status_code=400, detail=f"invalid range header value: {range_header}")
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid range header value: {range_header}")
 
 
 genome_router = APIRouter(prefix="/genomes")
@@ -88,7 +88,7 @@ async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request
     return StreamingResponse(
         stream_file(),
         media_type="text/x-fasta",
-        status_code=206 if range_header else 200,
+        status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
     )
 
 

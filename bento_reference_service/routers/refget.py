@@ -3,7 +3,7 @@ import logging
 import pysam
 
 from elasticsearch import AsyncElasticsearch
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from bento_reference_service import indices, models
 from bento_reference_service.config import Config, ConfigDependency
@@ -108,7 +108,9 @@ async def refget_sequence(
 
     if (start or end) and range_header:
         # TODO: Valid plain text error
-        raise HTTPException(status_code=400, detail="cannot specify both start/end and Range header")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="cannot specify both start/end and Range header"
+        )
 
     contig: models.Contig | None = await get_contig_by_checksum(sequence_checksum, config, es, logger)
 
@@ -120,39 +122,45 @@ async def refget_sequence(
             response.headers["Accept-Ranges"] = "none"
             if start > end:
                 if not contig.circular:
-                    raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+                    raise HTTPException(
+                        status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE, detail="Range Not Satisfiable"
+                    )
             end_final = end
         start_final = start
 
     if range_header is not None:
         range_header_match = RANGE_HEADER_PATTERN.match(range_header)
         if not range_header_match:
-            raise HTTPException(status_code=400, detail="bad range")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="bad range")
 
         try:
             start_final = int(range_header_match.group(1))
             if end_val := range_header_match.group(2):
                 end_final = end_val + 1  # range is inclusive, so we have to adjust it to be exclusive
         except ValueError:
-            raise HTTPException(status_code=400, detail="bad range")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="bad range")
 
     # Final bounds-checking
     if start_final >= contig.length:
         # start is 0-based; so if it's set to contig.length or more, it is out of range.
-        raise HTTPException(status_code=400, detail="start cannot be longer than sequence")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="start cannot be longer than sequence")
     if end_final > contig.length:
         # end is 0-based inclusive
-        raise HTTPException(status_code=400, detail="end cannot be past the end of the sequence")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="end cannot be past the end of the sequence"
+        )
 
     if contig is None:
         # TODO: proper 404 for refget spec
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"sequence not found with checksum: {sequence_checksum}",
         )
 
     if end_final - start_final > config.response_substring_limit:
-        raise HTTPException(status_code=400, detail="request for too many bytes")  # TODO: what is real error?
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="request for too many bytes"
+        )  # TODO: what is real error?
 
     genome = await get_genome_or_error(contig.genome, config)
 
@@ -180,7 +188,7 @@ async def refget_sequence_metadata(
         # TODO: proper 404 for refget spec
         # TODO: proper content type for exception - RefGet error class?
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"sequence not found with checksum: {sequence_checksum}",
         )
 

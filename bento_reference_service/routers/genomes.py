@@ -17,8 +17,6 @@ def exc_bad_range(range_header: str) -> HTTPException:
     return HTTPException(status_code=400, detail=f"invalid range header value: {range_header}")
 
 
-CHUNK_SIZE = 1024 * 16  # 16 KB at a time
-
 genome_router = APIRouter(prefix="/genomes")
 
 
@@ -60,6 +58,8 @@ async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request
         raise exc_bad_range(range_header)
 
     async def stream_file():
+        chunk_size = config.file_response_chunk_size
+
         # TODO: Use range support from FastAPI when it is merged
         async with aiofiles.open(genome.fasta, "rb") as ff:
             # Logic mostly ported from bento_drs
@@ -72,8 +72,8 @@ async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request
                 # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
                 data = await ff.read(
                     min(
-                        CHUNK_SIZE,
-                        (end + 1 - byte_offset) if end is not None else CHUNK_SIZE,
+                        chunk_size,
+                        (end + 1 - byte_offset) if end is not None else chunk_size,
                     )
                 )
                 byte_offset += len(data)

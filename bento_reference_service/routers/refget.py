@@ -4,12 +4,14 @@ import pysam
 
 from elasticsearch import AsyncElasticsearch
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from pydantic import BaseModel
 
 from bento_reference_service import indices, models
 from bento_reference_service.config import Config, ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
 from bento_reference_service.es import ESDependency
 from bento_reference_service.genomes import get_genomes_with_uris, get_genome_or_error
+from bento_reference_service.models import Alias
 from bento_reference_service.logger import LoggerDependency
 
 
@@ -172,6 +174,17 @@ async def refget_sequence(
         fa.close()
 
 
+class RefGetSequenceMetadata(BaseModel):
+    md5: str
+    trunc512: str
+    length: int
+    aliases: list[Alias]
+
+
+class RefGetSequenceMetadataResponse(BaseModel):
+    metadata: RefGetSequenceMetadata
+
+
 @refget_router.get("/{sequence_checksum}/metadata")
 async def refget_sequence_metadata(
     config: ConfigDependency,
@@ -179,7 +192,7 @@ async def refget_sequence_metadata(
     logger: LoggerDependency,
     response: Response,
     sequence_checksum: str,
-) -> dict:  # TODO: type: refget resp
+) -> RefGetSequenceMetadataResponse:
     contig: models.Contig | None = await get_contig_by_checksum(sequence_checksum, config, es, logger)
 
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
@@ -192,14 +205,14 @@ async def refget_sequence_metadata(
             detail=f"sequence not found with checksum: {sequence_checksum}",
         )
 
-    return {
-        "metadata": {
-            "md5": contig.md5,
-            "trunc512": contig.trunc512,
-            "length": contig.length,
-            "aliases": [a.model_dump(mode="json") for a in contig.aliases],
-        },
-    }
+    return RefGetSequenceMetadataResponse(
+        metadata=RefGetSequenceMetadata(
+            md5=contig.md5,
+            trunc512=contig.trunc512,
+            length=contig.length,
+            aliases=contig.aliases,
+        ),
+    )
 
 
 @refget_router.get("/service-info")

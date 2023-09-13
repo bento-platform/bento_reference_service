@@ -1,0 +1,3 @@
+[submodule "SO-Ontologies"]
+	path = SO-Ontologies
+	url = https://github.com/The-Sequence-Ontology/SO-Ontologies.git

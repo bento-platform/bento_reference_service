@@ -4,21 +4,18 @@ services:
   reference:
     build: .
     depends_on:
-      - reference_es
+      - reference-db
     environment:
-      - ELASTICSEARCH_URL=http://reference_es:9200
+      - DATABASE_URI=postgres://reference-db:5432
     volumes:
       - ./data:/reference/bento_reference_service/data
     networks:
       - net_reference_es
 
-  reference_es:
-    image: elasticsearch:8.6.0
-    environment:
-      - node.name=reference_es
-      - discovery.type=single-node
+  reference-db:
+    image: postgres:16
     volumes:
-      - ./es_data:/usr/share/elasticsearch/data
+      - ./pg_data:/usr/share/elasticsearch/data
     networks:
       - net_reference_es
 

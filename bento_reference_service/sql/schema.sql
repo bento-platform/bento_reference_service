@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS genomes (
     id VARCHAR(31) NOT NULL PRIMARY KEY,
     md5_hex VARCHAR(32) NOT NULL UNIQUE,  -- Hexadecimal string representation of MD5 checksum bytes
     ga4gh_checksum VARCHAR(63) NOT NULL UNIQUE,
-    fasta_uri TEXT NOT NULL UNIQUE,  -- Can be a local file URI, an S3 URI, or an HTTPS resource.
+    fasta_uri TEXT NOT NULL UNIQUE,  -- Can be a local file URI, an S3 URI, a DRS URI, or an HTTPS resource.
     fai_uri TEXT NOT NULL UNIQUE -- Corresponding .fa.fai for the FASTA. See fasta_uri for what this can be.
 );
 
@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS genome_features (
     position_text TEXT NOT NULL,  -- chr:start-end style searchable string
     feature_type VARCHAR(15) NOT NULL FOREIGN KEY REFERENCES genome_feature_types,
     strand_pos BOOLEAN,  -- NULL: strand not relevant; TRUE: (+); FALSE: (-)
+    -- TODO: add position and contig foreign key rather than genome_id
     PRIMARY KEY (genome_id, feature_id)
 );
 CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin ON genome_features USING (feature_name gin_trgm_ops);

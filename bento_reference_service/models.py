@@ -61,8 +61,8 @@ class Genome(BaseModel):
     md5: str
     trunc512: str
 
-    fasta: Path
-    fai: Path
+    fasta: str  # URI
+    fai: str  # URI
 
     # biological information
     taxon: OntologyTerm  # MUST be from NCBITaxon ontology - ingestion SHOULD validate this
@@ -71,7 +71,4 @@ class Genome(BaseModel):
 
 class GenomeWithURIs(Genome):
     uri: str
-    # Overrides
-    fasta: str  # URI
-    fai: str  # URI
     contigs: list[ContigWithRefgetURI]

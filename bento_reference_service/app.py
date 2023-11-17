@@ -47,7 +47,7 @@ app.exception_handler(StarletteHTTPException)(
 app.exception_handler(RequestValidationError)(validation_exception_handler_factory(authz_middleware))
 
 
-@app.get("/service-info")
+@app.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
 async def service_info(config: ConfigDependency):
     return {
         "id": config.service_id,
@@ -61,6 +61,7 @@ async def service_info(config: ConfigDependency):
         "bento": {
             "serviceKind": BENTO_SERVICE_KIND,
             "dataService": False,
+            "workflowProvider": True,
             "gitRepository": "https://github.com/bento-platform/bento_reference_service",
         },
     }

@@ -3,9 +3,6 @@
 # Set .gitconfig for development
 /set_gitconfig.bash
 
-# Source the development virtual environment
-source /env/bin/activate
-
 export ASGI_APP="bento_reference_service.app:app"
 
 if [[ -z "${INTERNAL_PORT}" ]]; then

@@ -15,6 +15,7 @@ from .logger import get_logger
 from .routers.genomes import genome_router
 from .routers.refget import refget_router
 from .routers.schemas import schema_router
+from .routers.workflows import workflow_router
 
 
 app = FastAPI()
@@ -23,9 +24,11 @@ app = FastAPI()
 # - genome listing
 # - our RefGet API implementation
 # - our JSON schemas
+# - our workflow metadata and WDLs
 app.include_router(genome_router)
 app.include_router(refget_router)
 app.include_router(schema_router)
+app.include_router(workflow_router)
 
 # TODO: Find a way to DI this
 config_for_setup = get_config()

@@ -1,3 +1,5 @@
+version 1.0
+
 workflow ingest_fasta {
     input {
         String genome_id
@@ -18,6 +20,16 @@ workflow ingest_fasta {
 
     call ingest_into_drs as drs_fai {
         input: file = s1.fai, access_token = access_token
+    }
+
+    call ingest_metadata_into_ref {
+        input:
+            fasta_bgzip = s1.fasta_bgzip,
+            fai = s1.fai,
+            fasta_drs_uri = drs_fasta.drs_uri,
+            fai_drs_uri = drs_fai.drs_uri,
+            reference_url = reference_url,
+            token = access_token
     }
 }
 
@@ -44,22 +56,43 @@ task ingest_into_drs {
     }
 
     command <<<
-        TODO: ingest + output DRS Id
+        TODO: ingest + output DRS URI
     >>>
 
     output {
-        String drs_id = "TODO"
+        String drs_uri = "TODO"
     }
 }
 
-task generate_metadata {
+task ingest_metadata_into_ref {
+    input {
+        String fasta_bgzip
+        String fai
+        String fasta_drs_uri
+        String fai_drs_uri
+        String reference_url
+        String token
+    }
+
     command <<<
-        fasta-checksum-utils genome.fa.gz --genome-id GRCh38 --out-format bento-json > metadata.json
+        fasta-checksum-utils genome.fa.gz --genome-id GRCh38 --out-format bento-json | \
+          jq '.fasta = "~{fasta_drs_uri}" | .fai = "~{fai_drs_uri}"' > metadata.json
+
+        RESPONSE=$(curl -X POST -k -s -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ~{token}" \
+            --data "@metadatajson" \
+            "~{reference_url}/genomes")
+        if [[ "${RESPONSE}" != "204" ]]
+        then
+            echo "Error: Reference service replied with ${RESPONSE}" 1>&2  # to stderr
+            exit 1
+        fi
+        echo ${RESPONSE}
     >>>
 
     output {
-        File genome = "genome.fa.gz"
-        File genome_index = "genome.fa.fai"
-        File metadata_json = "metadata.json"
+        String out = stdout()
+        String err = stderr()
     }
 }

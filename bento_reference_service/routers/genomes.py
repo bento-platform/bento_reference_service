@@ -20,7 +20,7 @@ def exc_bad_range(range_header: str) -> HTTPException:
 genome_router = APIRouter(prefix="/genomes")
 
 
-@genome_router.get("/genomes")
+@genome_router.get("")
 async def genomes_list(config: ConfigDependency, logger: LoggerDependency) -> list[m.GenomeWithURIs]:
     return [g async for g in get_genomes_with_uris(config, logger)]
 
@@ -31,7 +31,7 @@ async def genomes_list(config: ConfigDependency, logger: LoggerDependency) -> li
 # /genomes/<...> as the genome ID.
 
 
-@genome_router.get("/genomes/{genome_id}.fa")
+@genome_router.get("/{genome_id}.fa")
 async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request: Request) -> StreamingResponse:
     genome: m.Genome = await get_genome_or_error(genome_id, config)
 
@@ -92,23 +92,23 @@ async def genomes_detail_fasta(genome_id: str, config: ConfigDependency, request
     )
 
 
-@genome_router.get("/genomes/{genome_id}.fa.fai")
+@genome_router.get("/{genome_id}.fa.fai")
 async def genomes_detail_fasta_index(genome_id: str, config: ConfigDependency) -> FileResponse:
     genome: m.Genome = await get_genome_or_error(genome_id, config)
     return FileResponse(genome.fai, filename=f"{genome_id}.fa.fai")
 
 
-@genome_router.get("/genomes/{genome_id}")
+@genome_router.get("/{genome_id}")
 async def genomes_detail(genome_id: str, config: ConfigDependency) -> m.GenomeWithURIs:
     return await get_genome_with_uris_or_error(genome_id, config)
 
 
-@genome_router.get("/genomes/{genome_id}/contigs")
+@genome_router.get("/{genome_id}/contigs")
 async def genomes_detail_contigs(genome_id: str, config: ConfigDependency) -> list[m.ContigWithRefgetURI]:
     return (await get_genome_with_uris_or_error(genome_id, config)).contigs
 
 
-@genome_router.get("/genomes/{genome_id}/contigs/{contig_name}")
+@genome_router.get("/{genome_id}/contigs/{contig_name}")
 async def genomes_detail_contig_detail(
     genome_id: str, contig_name: str, config: ConfigDependency
 ) -> m.ContigWithRefgetURI:
@@ -126,14 +126,14 @@ async def genomes_detail_contig_detail(
     return contig
 
 
-@genome_router.get("/genomes/{genome_id}/gene_features.gtf.gz")
+@genome_router.get("/{genome_id}/gene_features.gtf.gz")
 async def genomes_detail_gene_features(genome_id: str):
     # TODO: how to return empty gtf.gz if nothing is here yet?
     raise NotImplementedError()
     # TODO: slices of GTF.gz
 
 
-@genome_router.get("/genomes/{genome_id}/gene_features.gtf.gz.tbi")
+@genome_router.get("/{genome_id}/gene_features.gtf.gz.tbi")
 async def genomes_detail_gene_features_index(genome_id: str):
     # TODO: how to return empty gtf.gz.tbi if nothing is here yet?
     raise NotImplementedError()  # TODO: gene features GTF tabix file

@@ -28,8 +28,13 @@ class CorsOriginsParsingSource(EnvSettingsSource):
 
 
 class Config(BaseSettings):
+    bento_debug: bool = False
+    bento_container_local: bool = False
+    bento_validate_ssl: bool = True
+
     service_id: str = f"{SERVICE_GROUP}:{SERVICE_ARTIFACT}"
     service_name: str = "Bento Reference Service"
+    service_description: str = "Reference data (genomes & annotations) service for the Bento platform."
     service_url_base_path: str = "http://127.0.0.1:5000"  # Base path to construct URIs from
 
     database_uri: str = "postgres://localhost:5432"

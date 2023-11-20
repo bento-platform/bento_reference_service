@@ -6,12 +6,13 @@ from bento_lib.responses.fastapi_errors import (
     http_exception_handler_factory,
     validation_exception_handler_factory,
 )
+from bento_lib.service_info import SERVICE_ORGANIZATION_C3G, build_service_info
 
 from . import __version__
 from .authz import authz_middleware
 from .config import get_config, ConfigDependency
 from .constants import BENTO_SERVICE_KIND, SERVICE_TYPE
-from .logger import get_logger
+from .logger import get_logger, LoggerDependency
 from .routers.genomes import genome_router
 from .routers.refget import refget_router
 from .routers.schemas import schema_router
@@ -51,20 +52,25 @@ app.exception_handler(RequestValidationError)(validation_exception_handler_facto
 
 
 @app.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
-async def service_info(config: ConfigDependency):
-    return {
-        "id": config.service_id,
-        "name": config.service_name,  # TODO: Should be globally unique?
-        "type": SERVICE_TYPE,
-        "description": "Reference data (genomes & annotations) service for the Bento platform.",
-        "organization": {"name": "C3G", "url": "https://www.computationalgenomics.ca"},
-        "contactUrl": config.service_contact_url,
-        "version": __version__,
-        "environment": "prod",
-        "bento": {
-            "serviceKind": BENTO_SERVICE_KIND,
-            "dataService": False,
-            "workflowProvider": True,
-            "gitRepository": "https://github.com/bento-platform/bento_reference_service",
+async def service_info(config: ConfigDependency, logger: LoggerDependency):
+    return await build_service_info(
+        {
+            "id": config.service_id,
+            "name": config.service_name,  # TODO: Should be globally unique?
+            "type": SERVICE_TYPE,
+            "description": config.service_description,
+            "organization": SERVICE_ORGANIZATION_C3G,
+            "contactUrl": config.service_contact_url,
+            "version": __version__,
+            "environment": "prod",
+            "bento": {
+                "serviceKind": BENTO_SERVICE_KIND,
+                "dataService": False,
+                "workflowProvider": True,
+                "gitRepository": "https://github.com/bento-platform/bento_reference_service",
+            },
         },
-    }
+        debug=config.bento_debug,
+        local=config.bento_container_local,
+        logger=logger,
+    )

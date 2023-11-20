@@ -16,6 +16,9 @@ COPY run.dev.bash .
 RUN poetry config virtualenvs.create false && \
     poetry install --no-root
 
+# Tell the service that we're running a local development container
+ENV BENTO_CONTAINER_LOCAL=true
+
 # Don't copy in actual code, since it'll be mounted in via volume for development
 CMD [ "bash", "./entrypoint.bash" ]
 ENTRYPOINT [ "bash", "./run.dev.bash" ]

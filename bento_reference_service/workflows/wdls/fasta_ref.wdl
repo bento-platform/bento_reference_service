@@ -1,6 +1,6 @@
 version 1.0
 
-workflow ingest_fasta {
+workflow fasta_ref {
     input {
         String genome_id
         File genome_fasta

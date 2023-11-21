@@ -1,5 +1,6 @@
 import json
 
+from bento_lib.logging import LogLevelLiteral
 from fastapi import Depends
 from functools import lru_cache
 from pathlib import Path
@@ -36,6 +37,8 @@ class Config(BaseSettings):
     service_name: str = "Bento Reference Service"
     service_description: str = "Reference data (genomes & annotations) service for the Bento platform."
     service_url_base_path: str = "http://127.0.0.1:5000"  # Base path to construct URIs from
+
+    log_level: LogLevelLiteral = "debug"
 
     database_uri: str = "postgres://localhost:5432"
     data_path: Path = Path(__file__).parent / "data"

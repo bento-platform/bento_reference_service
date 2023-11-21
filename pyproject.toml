@@ -27,7 +27,7 @@ classifiers = [
 python = "^3.10.0"
 fastapi = "^0.104.1"
 pydantic = "^2.5.1"
-bento-lib = {extras = ["fastapi"], version = "^10.0.0"}
+bento-lib = {extras = ["asyncpg", "fastapi"], version = "^10.1.0"}
 aiofiles = "^23.2.1"
 pysam = "^0.22.0"
 elasticsearch = {extras = ["async"], version = "^8.6.0"}

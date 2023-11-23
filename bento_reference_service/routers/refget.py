@@ -121,7 +121,7 @@ async def refget_sequence(
 
 class RefGetSequenceMetadata(BaseModel):
     md5: str
-    trunc512: str
+    ga4gh: str
     length: int
     aliases: list[Alias]
 
@@ -154,24 +154,24 @@ async def refget_sequence_metadata(
     return RefGetSequenceMetadataResponse(
         metadata=RefGetSequenceMetadata(
             md5=contig.md5,
-            trunc512=contig.trunc512,
+            ga4gh=contig.ga4gh,
             length=contig.length,
             aliases=contig.aliases,
         ),
     )
 
 
-# TODO: redo for refget 2 properly - this endpoint doesn't exist anymore
+# TODO: redo for refget 2 properly
 @refget_router.get("/service-info")
 async def refget_service_info(config: ConfigDependency, response: Response) -> dict:
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
+    # TODO: respond will full service info
     return {
-        "service": {
+        "refget": {
             "circular_supported": False,
             "algorithms": ["md5", "ga4gh"],
             # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
             # It's a substring!
             "subsequence_limit": config.response_substring_limit,
-            "supported_api_versions": ["2.0"],
         }
     }

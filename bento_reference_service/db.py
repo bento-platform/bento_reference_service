@@ -88,6 +88,19 @@ class Database(PgAsyncDatabase):
     async def get_genome(self, g_id: str) -> GenomeWithURIs | None:
         return await anext(self._select_genomes(g_id), None)
 
+    async def get_genome_id_and_contig_by_checksum_str(
+        self, checksum_str: str
+    ) -> tuple[str, ContigWithRefgetURI] | None:
+        chk_norm: str = checksum_str.rstrip("ga4gh:").rstrip("md5:")  # strip optional checksum prefixes if present
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            res = await conn.fetchrow(
+                "SELECT * FROM genome_contigs WHERE md5_checksum = $1 OR ga4gh_checksum = $1", (chk_norm,)
+            )
+            if res is None:
+                return None
+            return res["genome_id"], self.deserialize_contig(res)
+
     async def create_genome(self, g: Genome) -> GenomeWithURIs | None:
         conn: asyncpg.Connection
         async with self.connect() as conn:

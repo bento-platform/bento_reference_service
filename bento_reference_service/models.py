@@ -7,7 +7,9 @@ __all__ = [
     "GTFFeature",
     "Alias",
     "Contig",
+    "ContigWithRefgetURI",
     "Genome",
+    "GenomeWithURIs",
 ]
 
 # Pydantic/dict models, not database models
@@ -38,37 +40,37 @@ class Alias(BaseModel):
 
 class Contig(BaseModel):
     name: str
-    aliases: list[Alias]
+    aliases: tuple[Alias, ...]
 
     # checksums for sequence (content-based addressing)
     md5: str
-    trunc512: str
+    ga4gh: str
 
     length: int  # Length of sequence
     circular: bool
 
 
 class ContigWithRefgetURI(Contig):
-    refget: str
+    refget_uris: tuple[str, ...]
 
 
 class Genome(BaseModel):
     id: str
-    aliases: list[Alias]
+    aliases: tuple[Alias, ...]
     # uri: str
 
     # checksums for FASTA
     md5: str
-    trunc512: str
+    ga4gh: str
 
     fasta: str  # URI
     fai: str  # URI
 
     # biological information
     taxon: OntologyTerm  # MUST be from NCBITaxon ontology - ingestion SHOULD validate this
-    contigs: list[Contig]
+    contigs: tuple[Contig, ...]
 
 
 class GenomeWithURIs(Genome):
     uri: str
-    contigs: list[ContigWithRefgetURI]
+    contigs: tuple[ContigWithRefgetURI, ...]

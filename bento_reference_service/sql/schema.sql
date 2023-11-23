@@ -9,14 +9,14 @@ CREATE TABLE IF NOT EXISTS genomes (
 );
 
 CREATE TABLE IF NOT EXISTS genome_aliases (
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes,
+    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes ON DELETE CASCADE,
     alias VARCHAR(31) NOT NULL,
     naming_authority VARCHAR(63) NOT NULL,
     PRIMARY KEY (genome_id, alias)
 );
 
 CREATE TABLE IF NOT EXISTS genome_contigs (
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes,
+    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes ON DELETE CASCADE,
     contig_name VARCHAR(31) NOT NULL,
     contig_length INTEGER NOT NULL,
     circular BOOLEAN NOT NULL DEFAULT FALSE,  -- Whether this sequence is circular, e.g., the mitochondrial genome
@@ -30,11 +30,11 @@ CREATE TABLE IF NOT EXISTS genome_contigs (
 );
 
 CREATE TABLE IF NOT EXISTS genome_contig_aliases (
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes,
+    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes ON DELETE CASCADE,
     contig_name VARCHAR(63) NOT NULL,
     alias VARCHAR(63) NOT NULL,
     naming_authority VARCHAR(63) NOT NULL,
-    FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs,
+    FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs ON DELETE CASCADE,
     PRIMARY KEY (genome_id, contig_name, alias)
 );
 

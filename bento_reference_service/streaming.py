@@ -1,3 +1,5 @@
+from typing import AsyncIterator
+
 import aiofiles
 import aiohttp
 import pathlib
@@ -11,6 +13,7 @@ from bento_reference_service.config import Config
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
 
 __all__ = [
+    "stream_from_uri",
     "generate_uri_streaming_response",
 ]
 
@@ -44,7 +47,7 @@ async def stream_file(config: Config, path: pathlib.Path, start: int, end: int):
                 break
 
 
-async def stream_http(config: Config, url: str, headers: dict[str, str]):
+async def stream_http(config: Config, url: str, headers: dict[str, str]) -> AsyncIterator[bytes]:
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as res:
             async for chunk in res.content.iter_chunked(config.file_response_chunk_size):
@@ -55,7 +58,7 @@ def exc_bad_range(range_header: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid range header value: {range_header}")
 
 
-async def generate_uri_streaming_response(config: Config, uri: str, range_header: str):
+async def stream_from_uri(config: Config, uri: str, range_header: str | None) -> AsyncIterator[bytes]:
     if range_header is None:
         # TODO: send the file if no range header and the FASTA is below some response size limit
         raise NotImplementedError()
@@ -78,11 +81,7 @@ async def generate_uri_streaming_response(config: Config, uri: str, range_header
     parsed_uri = urlparse(uri)
 
     if parsed_uri.scheme == "file":
-        return StreamingResponse(
-            stream_file(config, pathlib.Path(parsed_uri.path), start, end),
-            media_type="text/x-fasta",
-            status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
-        )
+        return stream_file(config, pathlib.Path(parsed_uri.path), start, end)
 
     elif parsed_uri.scheme in ("drs", "http", "https"):
         # Proxy request to HTTP(S) URL, but override media type
@@ -102,15 +101,19 @@ async def generate_uri_streaming_response(config: Config, uri: str, range_header
                         )
                     url = https_access["access_url"]["url"]
 
-        return StreamingResponse(
-            # Don't pass Authorization header to possibly external sources
-            stream_http(config, url, headers={"Range": range_header} if range_header else {}),
-            media_type="text/x-fasta",
-            status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
-        )
+        # Don't pass Authorization header to possibly external sources
+        return stream_http(config, url, headers={"Range": range_header} if range_header else {})
 
     else:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unsupported URI scheme in genome record: {parsed_uri.scheme}",
+        raise ValueError(f"Unsupported URI scheme in genome record: {parsed_uri.scheme}")
+
+
+async def generate_uri_streaming_response(config: Config, uri: str, range_header: str | None, media_type: str):
+    try:
+        return StreamingResponse(
+            await stream_from_uri(config, uri, range_header),
+            media_type=media_type,
+            status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
         )
+    except ValueError as e:  # Unsupported URI scheme
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

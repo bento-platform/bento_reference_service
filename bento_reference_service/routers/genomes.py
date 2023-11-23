@@ -7,6 +7,7 @@ from bento_reference_service import models as m
 from bento_reference_service.config import ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
 from bento_reference_service.genomes import get_genome_or_error, get_genome_with_uris_or_error, get_genomes_with_uris
+from bento_reference_service.db import DatabaseDependency
 from bento_reference_service.logger import LoggerDependency
 
 
@@ -21,11 +22,20 @@ genome_router = APIRouter(prefix="/genomes")
 
 
 @genome_router.get("")
-async def genomes_list(config: ConfigDependency, logger: LoggerDependency) -> list[m.GenomeWithURIs]:
-    return [g async for g in get_genomes_with_uris(config, logger)]
+async def genomes_list(db: DatabaseDependency) -> tuple[m.GenomeWithURIs, ...]:
+    return await db.get_genomes()
 
 
-# TODO: more normal genome creation endpoint
+@genome_router.post("")
+async def genomes_create(db: DatabaseDependency, genome: m.Genome) -> m.GenomeWithURIs:
+    if g := await db.create_genome(genome):
+        return g
+    else:  # pragma: no cover
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not find genome with ID {genome.id} after creation",
+        )
+
 
 # Put FASTA/FAI endpoints ahead of detail endpoint, so they get handled first, and we fall back to treating the whole
 # /genomes/<...> as the genome ID.

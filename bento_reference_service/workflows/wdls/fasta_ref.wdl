@@ -9,7 +9,7 @@ workflow fasta_ref {
         String reference_url
     }
 
-    call generate_bgzipped_fasta_and_fai_if_needed as s1 {
+    call uncompress_fasta_and_generate_fai_if_needed as s1 {
         input:
             genome_fasta = genome_fasta
     }
@@ -24,8 +24,6 @@ workflow fasta_ref {
 
     call ingest_metadata_into_ref {
         input:
-            fasta_bgzip = s1.fasta_bgzip,
-            fai = s1.fai,
             fasta_drs_uri = drs_fasta.drs_uri,
             fai_drs_uri = drs_fai.drs_uri,
             reference_url = reference_url,
@@ -33,19 +31,23 @@ workflow fasta_ref {
     }
 }
 
-task generate_bgzipped_fasta_and_fai_if_needed {
+task uncompress_fasta_and_generate_fai_if_needed {
     input {
         File genome_fasta
     }
 
     command <<<
-        bgzip -c '~{genome_fasta}` > genome.fasta.gz
-        samtools faidx genome.fasta.gz --fai-idx genome.fasta.gz.fai
+        if [[ '~{genome_fasta}' == *.gz ]]; then
+            gunzip -c '~{genome_fasta}' > genome.fasta
+        else
+            cp '~{genome_fasta}' genome.fasta
+        fi
+        samtools faidx genome.fasta --fai-idx genome.fasta.fai
     >>>
 
     output {
-        File fasta_bgzip = "genome.fasta.gz"
-        File fai = "genome.fasta.gz.fai"
+        File fasta = "genome.fasta"
+        File fai = "genome.fasta.fai"
     }
 }
 
@@ -66,8 +68,6 @@ task ingest_into_drs {
 
 task ingest_metadata_into_ref {
     input {
-        String fasta_bgzip
-        String fai
         String fasta_drs_uri
         String fai_drs_uri
         String reference_url

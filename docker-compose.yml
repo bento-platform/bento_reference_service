@@ -10,15 +10,16 @@ services:
     volumes:
       - ./data:/reference/bento_reference_service/data
     networks:
-      - net_reference_es
+      - net_reference_db
 
   reference-db:
     image: postgres:16
     volumes:
-      - ./pg_data:/usr/share/elasticsearch/data
+      - ./pg_data:/var/lib/postgresql/data
     networks:
-      - net_reference_es
+      - net_reference_db
 
 networks:
-  net_reference_es:
+  net_reference_db:
     driver: bridge
+    internal: true

@@ -5,4 +5,4 @@ env
 data/*
 !data/.gitkeep
 
-es_data
+pg_data

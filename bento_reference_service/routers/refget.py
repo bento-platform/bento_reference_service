@@ -1,18 +1,13 @@
-import logging
-
 import pysam
 
-from elasticsearch import AsyncElasticsearch
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
-from bento_reference_service import indices, models
-from bento_reference_service.config import Config, ConfigDependency
+from bento_reference_service import models
+from bento_reference_service.config import ConfigDependency
 from bento_reference_service.constants import RANGE_HEADER_PATTERN
-from bento_reference_service.es import ESDependency
-from bento_reference_service.genomes import get_genomes_with_uris, get_genome_or_error
+from bento_reference_service.db import DatabaseDependency
 from bento_reference_service.models import Alias
-from bento_reference_service.logger import LoggerDependency
 
 
 __all__ = [
@@ -28,66 +23,10 @@ REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
 refget_router = APIRouter(prefix="/sequence")
 
 
-async def get_contig_by_checksum(
-    checksum: str,
-    # Dependencies
-    config: Config,
-    es: AsyncElasticsearch,
-    logger: logging.Logger,
-) -> models.Contig | None:
-    genome_index = indices.make_genome_index_def(config)
-
-    es_resp = await es.search(
-        index=genome_index["name"],
-        query={
-            "nested": {
-                "path": "contigs",
-                "query": {
-                    "bool": {
-                        "should": [
-                            {"match": {"contigs.md5": checksum}},
-                            {"match": {"contigs.trunc512": checksum}},
-                        ],
-                    },
-                },
-                "inner_hits": {},
-                "score_mode": "max",  # We are interested in the
-            },
-        },
-    )
-
-    if es_resp["hits"]["total"]["value"] > 0:
-        # Use ES result, since we got a hit
-        sg = es_resp["hits"]["hits"][0]
-
-        # We have the genome, but we still need to extract the contig from inner hits
-        if sg["inner_hits"]["contigs"]["hits"]["total"]["value"] > 0:
-            # We have a contig hit, so return it
-            return models.Contig(**sg["inner_hits"]["contigs"]["hits"]["hits"][0]["_source"])
-
-        for sc in sg["contigs"]:
-            if checksum in (sc["md5"], sc["trunc512"]):
-                return models.Contig.model_validate(sc)
-
-        logger.error(f"Found ES hit for checksum {checksum} but could not find contig in inner hits")
-
-    logger.debug(f"No hits in ES index for checksum {checksum}")
-
-    # Manually iterate as a fallback
-    async for genome in get_genomes_with_uris(config, logger):
-        for sc in genome.contigs:
-            if checksum in (sc.md5, sc.trunc512):
-                logger.warning(f"Found manual hit for {checksum}, but no corresponding entry in ES index")
-                return sc
-
-    return None
-
-
 @refget_router.get("/{sequence_checksum}")
 async def refget_sequence(
     config: ConfigDependency,
-    es: ESDependency,
-    logger: LoggerDependency,
+    db: DatabaseDependency,
     request: Request,
     response: Response,
     sequence_checksum: str,
@@ -114,7 +53,20 @@ async def refget_sequence(
             status_code=status.HTTP_400_BAD_REQUEST, detail="cannot specify both start/end and Range header"
         )
 
-    contig: models.Contig | None = await get_contig_by_checksum(sequence_checksum, config, es, logger)
+    res: tuple[str, models.ContigWithRefgetURI] | None = await db.get_genome_id_and_contig_by_checksum_str(
+        sequence_checksum
+    )
+
+    if res is None:
+        # TODO: proper 404 for refget spec
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"sequence not found with checksum: {sequence_checksum}",
+        )
+
+    contig: models.ContigWithRefgetURI = res[1]
+
+    # TODO: fetch FAI, translate contig fetch into FASTA fetch
 
     start_final: int = 0  # 0-based, inclusive
     end_final: int = contig.length - 1  # 0-based, exclusive - need to adjust range (which is inclusive)
@@ -152,19 +104,12 @@ async def refget_sequence(
             status_code=status.HTTP_400_BAD_REQUEST, detail="end cannot be past the end of the sequence"
         )
 
-    if contig is None:
-        # TODO: proper 404 for refget spec
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"sequence not found with checksum: {sequence_checksum}",
-        )
-
     if end_final - start_final > config.response_substring_limit:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="request for too many bytes"
         )  # TODO: what is real error?
 
-    genome = await get_genome_or_error(contig.genome, config)
+    genome = await db.get_genome(res[0])
 
     fa = pysam.FastaFile(filename=str(genome.fasta), filepath_index=str(genome.fai))
     try:
@@ -187,17 +132,17 @@ class RefGetSequenceMetadataResponse(BaseModel):
 
 @refget_router.get("/{sequence_checksum}/metadata")
 async def refget_sequence_metadata(
-    config: ConfigDependency,
-    es: ESDependency,
-    logger: LoggerDependency,
+    db: DatabaseDependency,
     response: Response,
     sequence_checksum: str,
 ) -> RefGetSequenceMetadataResponse:
-    contig: models.Contig | None = await get_contig_by_checksum(sequence_checksum, config, es, logger)
+    res: tuple[str, models.ContigWithRefgetURI] | None = await db.get_genome_id_and_contig_by_checksum_str(
+        sequence_checksum
+    )
 
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
 
-    if contig is None:
+    if res is None:
         # TODO: proper 404 for refget spec
         # TODO: proper content type for exception - RefGet error class?
         raise HTTPException(
@@ -205,6 +150,7 @@ async def refget_sequence_metadata(
             detail=f"sequence not found with checksum: {sequence_checksum}",
         )
 
+    contig = res[1]
     return RefGetSequenceMetadataResponse(
         metadata=RefGetSequenceMetadata(
             md5=contig.md5,
@@ -215,16 +161,17 @@ async def refget_sequence_metadata(
     )
 
 
+# TODO: redo for refget 2 properly - this endpoint doesn't exist anymore
 @refget_router.get("/service-info")
 async def refget_service_info(config: ConfigDependency, response: Response) -> dict:
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
     return {
         "service": {
             "circular_supported": False,
-            "algorithms": ["md5", "trunc512"],
+            "algorithms": ["md5", "ga4gh"],
             # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
             # It's a substring!
             "subsequence_limit": config.response_substring_limit,
-            "supported_api_versions": ["1.0"],
+            "supported_api_versions": ["2.0"],
         }
     }

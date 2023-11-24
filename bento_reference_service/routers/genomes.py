@@ -45,7 +45,7 @@ async def genomes_detail_fasta(
     # Don't use FastAPI's auto-Header tool for the Range header
     # 'cause I don't want to shadow Python's range() function
     range_header: str | None = request.headers.get("Range", None)
-    return await generate_uri_streaming_response(config, genome.fasta, range_header)
+    return await generate_uri_streaming_response(config, genome.fasta, range_header, "text/x-fasta")
 
 
 @genome_router.get("/{genome_id}.fa.fai")

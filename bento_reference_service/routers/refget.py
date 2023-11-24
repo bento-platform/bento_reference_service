@@ -1,13 +1,15 @@
+import io
 import pysam
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
-from bento_reference_service import models
-from bento_reference_service.config import ConfigDependency
-from bento_reference_service.constants import RANGE_HEADER_PATTERN
-from bento_reference_service.db import DatabaseDependency
-from bento_reference_service.models import Alias
+from .. import models
+from ..config import ConfigDependency
+from ..constants import RANGE_HEADER_PATTERN
+from ..db import DatabaseDependency
+from ..models import Alias
+from ..streaming import stream_from_uri, generate_uri_streaming_response
 
 
 __all__ = [
@@ -21,6 +23,23 @@ REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
 REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
 
 refget_router = APIRouter(prefix="/sequence")
+
+
+def parse_fai(fai_data: bytes) -> dict[str, tuple[int, int, int, int]]:
+    res: dict[str, tuple[int, int, int, int]] = {}
+
+    for record in fai_data.split(b"\n"):
+        if not record:  # trailing newline or whatever
+            continue
+
+        row = record.split(b"\t")
+        if len(row) != 5:
+            raise ValueError(f"Invalid FAI record: {record.decode('ascii')}")
+
+        # FAI record: contig, (num bases, byte index, bases per line, bytes per line)
+        res[row[0].decode("ascii")] = (int(row[1]), int(row[2]), int(row[3]), int(row[4]))
+
+    return res
 
 
 @refget_router.get("/{sequence_checksum}")
@@ -53,9 +72,7 @@ async def refget_sequence(
             status_code=status.HTTP_400_BAD_REQUEST, detail="cannot specify both start/end and Range header"
         )
 
-    res: tuple[str, models.ContigWithRefgetURI] | None = await db.get_genome_id_and_contig_by_checksum_str(
-        sequence_checksum
-    )
+    res = await db.get_genome_id_and_contig_by_checksum_str(sequence_checksum)
 
     if res is None:
         # TODO: proper 404 for refget spec
@@ -64,9 +81,21 @@ async def refget_sequence(
             detail=f"sequence not found with checksum: {sequence_checksum}",
         )
 
+    genome: models.GenomeWithURIs = res[0]
     contig: models.ContigWithRefgetURI = res[1]
 
-    # TODO: fetch FAI, translate contig fetch into FASTA fetch
+    # Fetch FAI so we can index into FASTA, properly translating the range header for the contig along the way.
+    with io.BytesIO() as fb:
+        async for chunk in (await stream_from_uri(config, genome.fai, None)):
+            fb.write(chunk)
+        fb.seek(0)
+        fai_data = fb.read()
+
+    # TODO: translate contig fetch into FASTA fetch using FAI data
+    #  since FASTAs can have newlines, we need to account for the difference between bytes requested + the bases we
+    #  return
+
+    # TODO: correct refget-formatted errors
 
     start_final: int = 0  # 0-based, inclusive
     end_final: int = contig.length - 1  # 0-based, exclusive - need to adjust range (which is inclusive)
@@ -79,6 +108,8 @@ async def refget_sequence(
                     raise HTTPException(
                         status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE, detail="Range Not Satisfiable"
                     )
+                else:
+                    raise NotImplementedError()  # TODO: support circular contig querying
             end_final = end
         start_final = start
 
@@ -109,14 +140,8 @@ async def refget_sequence(
             status_code=status.HTTP_400_BAD_REQUEST, detail="request for too many bytes"
         )  # TODO: what is real error?
 
-    genome = await db.get_genome(res[0])
-
-    fa = pysam.FastaFile(filename=str(genome.fasta), filepath_index=str(genome.fai))
-    try:
-        # TODO: handle missing region / coordinate exceptions explicitly
-        return fa.fetch(contig.name, start_final, end_final).encode("ascii")
-    finally:
-        fa.close()
+    # TODO: correct range: accounting for offsets in file from FAI
+    return generate_uri_streaming_response(config, genome.fasta, "TODO", "text/x-fasta")
 
 
 class RefGetSequenceMetadata(BaseModel):

@@ -18,7 +18,7 @@ __all__ = [
 ]
 
 
-async def stream_file(config: Config, path: pathlib.Path, start: int, end: int):
+async def stream_file(config: Config, path: pathlib.Path, start: int, end: int | None):
     chunk_size = config.file_response_chunk_size
 
     # TODO: Use range support from FastAPI when it is merged
@@ -58,7 +58,21 @@ def exc_bad_range(range_header: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid range header value: {range_header}")
 
 
-async def stream_from_uri(config: Config, uri: str, range_header: str | None) -> AsyncIterator[bytes]:
+async def drs_bytes_url_from_uri(drs_uri: str) -> str:
+    async with aiohttp.ClientSession() as session:
+        async with session.get(decode_drs_uri(drs_uri)) as res:
+            drs_obj = await res.json()
+            # TODO: this doesn't support access IDs / the full DRS spec
+            https_access = next(filter(lambda am: am["type"] == "https", drs_obj["access_methods"]), None)
+            if https_access is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="DRS record for genome does not have an HTTPS access method",
+                )
+            return https_access["access_url"]["url"]
+
+
+async def stream_from_uri(config: Config, original_uri: str, range_header: str | None) -> AsyncIterator[bytes]:
     if range_header is None:
         # TODO: send the file if no range header and the FASTA is below some response size limit
         raise NotImplementedError()
@@ -78,34 +92,22 @@ async def stream_from_uri(config: Config, uri: str, range_header: str | None) ->
         raise exc_bad_range(range_header)
 
     # TODO: handle parsing exception
-    parsed_uri = urlparse(uri)
+    parsed_uri = urlparse(original_uri)
+    match parsed_uri.scheme:
+        case "file":
+            return stream_file(config, pathlib.Path(parsed_uri.path), start, end)
 
-    if parsed_uri.scheme == "file":
-        return stream_file(config, pathlib.Path(parsed_uri.path), start, end)
+        case "drs" | "http" | "https":
+            # Proxy request to HTTP(S) URL, but override media type
 
-    elif parsed_uri.scheme in ("drs", "http", "https"):
-        # Proxy request to HTTP(S) URL, but override media type
+            # If this is a DRS URI, we need to first fetch the DRS object record + parse out the access method
+            url = drs_bytes_url_from_uri(original_uri) if parsed_uri.scheme == "drs" else original_uri
 
-        url = uri
+            # Don't pass Authorization header to possibly external sources
+            return stream_http(config, url, headers={"Range": range_header} if range_header else {})
 
-        if parsed_uri.scheme == "drs":
-            async with aiohttp.ClientSession() as session:
-                async with session.get(decode_drs_uri(uri)) as res:
-                    drs_obj = await res.json()
-                    # TODO: this doesn't support access IDs / the full DRS spec
-                    https_access = next(filter(lambda am: am["type"] == "https", drs_obj["access_methods"]), None)
-                    if https_access is None:
-                        raise HTTPException(
-                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="DRS record for genome does not have an HTTPS access method",
-                        )
-                    url = https_access["access_url"]["url"]
-
-        # Don't pass Authorization header to possibly external sources
-        return stream_http(config, url, headers={"Range": range_header} if range_header else {})
-
-    else:
-        raise ValueError(f"Unsupported URI scheme in genome record: {parsed_uri.scheme}")
+        case _:
+            raise ValueError(f"Unsupported URI scheme in genome record: {parsed_uri.scheme}")
 
 
 async def generate_uri_streaming_response(config: Config, uri: str, range_header: str | None, media_type: str):

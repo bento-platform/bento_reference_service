@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from .. import models as m
+from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..db import DatabaseDependency
 from ..streaming import generate_uri_streaming_response
@@ -33,7 +34,7 @@ async def genomes_create(db: DatabaseDependency, genome: m.Genome) -> m.GenomeWi
 # /genomes/<...> as the genome ID.
 
 
-@genome_router.get("/{genome_id}.fa")
+@genome_router.get("/{genome_id}.fa", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_fasta(
     genome_id: str, config: ConfigDependency, db: DatabaseDependency, request: Request
 ) -> StreamingResponse:
@@ -48,7 +49,7 @@ async def genomes_detail_fasta(
     return await generate_uri_streaming_response(config, genome.fasta, range_header, "text/x-fasta")
 
 
-@genome_router.get("/{genome_id}.fa.fai")
+@genome_router.get("/{genome_id}.fa.fai", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_fasta_index(
     genome_id: str, config: ConfigDependency, db: DatabaseDependency, request: Request
 ) -> StreamingResponse:
@@ -63,21 +64,21 @@ async def genomes_detail_fasta_index(
     return await generate_uri_streaming_response(config, genome.fasta, range_header, "text/plain")
 
 
-@genome_router.get("/{genome_id}")
+@genome_router.get("/{genome_id}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail(genome_id: str, db: DatabaseDependency) -> m.GenomeWithURIs:
     if g := await db.get_genome(genome_id):
         return g
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 
 
-@genome_router.get("/{genome_id}/contigs")
+@genome_router.get("/{genome_id}/contigs", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_contigs(genome_id: str, db: DatabaseDependency) -> tuple[m.ContigWithRefgetURI, ...]:
     if g := await db.get_genome(genome_id):
         return g.contigs
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 
 
-@genome_router.get("/{genome_id}/contigs/{contig_name}")
+@genome_router.get("/{genome_id}/contigs/{contig_name}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_contig_detail(
     genome_id: str, contig_name: str, db: DatabaseDependency
 ) -> m.ContigWithRefgetURI:

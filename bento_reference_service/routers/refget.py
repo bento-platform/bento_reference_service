@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from .. import models
+from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..constants import RANGE_HEADER_PATTERN
 from ..db import DatabaseDependency
@@ -42,7 +43,7 @@ def parse_fai(fai_data: bytes) -> dict[str, tuple[int, int, int, int]]:
     return res
 
 
-@refget_router.get("/{sequence_checksum}")
+@refget_router.get("/{sequence_checksum}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def refget_sequence(
     config: ConfigDependency,
     db: DatabaseDependency,
@@ -155,7 +156,7 @@ class RefGetSequenceMetadataResponse(BaseModel):
     metadata: RefGetSequenceMetadata
 
 
-@refget_router.get("/{sequence_checksum}/metadata")
+@refget_router.get("/{sequence_checksum}/metadata", dependencies=[authz_middleware.dep_public_endpoint()])
 async def refget_sequence_metadata(
     db: DatabaseDependency,
     response: Response,
@@ -187,7 +188,7 @@ async def refget_sequence_metadata(
 
 
 # TODO: redo for refget 2 properly
-@refget_router.get("/service-info")
+@refget_router.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
 async def refget_service_info(config: ConfigDependency, response: Response) -> dict:
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
     # TODO: respond will full service info

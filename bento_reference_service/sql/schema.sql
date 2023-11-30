@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_type_synonyms (
 );
 
 -- corresponds with the GFF3 values: [-, +, ?, .] respectively
-CREATE TYPE strand_type AS ENUM ('negative', 'positive', 'unknown', 'not_stranded');
+CREATE TYPE IF NOT EXISTS strand_type AS ENUM ('negative', 'positive', 'unknown', 'not_stranded');
 
 CREATE TABLE IF NOT EXISTS genome_features (
     genome_id VARCHAR(31) NOT NULL REFERENCES genomes,

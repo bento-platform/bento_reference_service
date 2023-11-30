@@ -1,5 +1,4 @@
 import io
-import pysam
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel

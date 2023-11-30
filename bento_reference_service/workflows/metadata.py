@@ -15,7 +15,7 @@ workflow_set.add_workflow(
         type="ingestion",
         description=(
             "Given a FASTA or gzipped FASTA reference genome, this workflow indexes and ingests it into the Bento "
-            "Reference Service."
+            "Reference Service. All ingested FASTA files are COMPLETELY PUBLIC, so do not ingest any sensitive data!"
         ),
         file="fasta_ref",
         tags=frozenset(("reference", "fasta")),

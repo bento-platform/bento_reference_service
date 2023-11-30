@@ -1,6 +1,6 @@
 from bento_lib.auth.middleware.fastapi import FastApiAuthMiddleware
 from .config import get_config
-from logger import get_logger
+from .logger import get_logger
 
 __all__ = [
     "authz_middleware",

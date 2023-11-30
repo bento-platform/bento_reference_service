@@ -49,8 +49,12 @@ CREATE TABLE IF NOT EXISTS genome_feature_type_synonyms (
     PRIMARY KEY (type_id, synonym)
 );
 
--- corresponds with the GFF3 values: [-, +, ?, .] respectively
-CREATE TYPE IF NOT EXISTS strand_type AS ENUM ('negative', 'positive', 'unknown', 'not_stranded');
+DO $$ BEGIN
+    -- corresponds with the GFF3 values: [-, +, ?, .] respectively
+    CREATE TYPE strand_type AS ENUM ('negative', 'positive', 'unknown', 'not_stranded');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 CREATE TABLE IF NOT EXISTS genome_features (
     genome_id VARCHAR(31) NOT NULL REFERENCES genomes,

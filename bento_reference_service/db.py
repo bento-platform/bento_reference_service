@@ -63,16 +63,21 @@ class Database(PgAsyncDatabase):
                 f"""
                 SELECT
                     id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri,
-                    array(SELECT alias, naming_authority FROM genome_aliases ga WHERE g.id = ga.genome_id) aliases,
                     array(
-                        SELECT
-                            contig_name, contig_length, circular, md5_checksum, ga4gh_checksum,
-                            array(
-                                SELECT alias, naming_authority
-                                FROM genome_contig_aliases gca
-                                WHERE g.id = gca.genome_id AND gc.contig_name = gca.contig_name
-                            ) aliases
-                        FROM genome_contigs gc WHERE g.id = gc.genome_id
+                        SELECT json_agg(ga.*) FROM genome_aliases ga WHERE g.id = ga.genome_id
+                    ) aliases,
+                    array(
+                        WITH contigs_tmp AS (
+                            SELECT
+                                contig_name, contig_length, circular, md5_checksum, ga4gh_checksum,
+                                array(
+                                    SELECT json_agg(gca.*)
+                                    FROM genome_contig_aliases gca
+                                    WHERE g.id = gca.genome_id AND gc.contig_name = gca.contig_name
+                                ) aliases
+                            FROM genome_contigs gc WHERE g.id = gc.genome_id
+                        )
+                        SELECT json_agg(contigs_tmp.*) FROM contigs_tmp
                     ) contigs
                 FROM genomes g {where_clause}
                 """,

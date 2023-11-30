@@ -22,7 +22,7 @@ async def genomes_list(
     if response_format == "id_list":
         return tuple(g.id for g in genomes)
     # else, format as full response
-    return await db.get_genomes()
+    return genomes
 
 
 @genome_router.post("")

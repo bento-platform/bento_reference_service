@@ -14,8 +14,14 @@ __all__ = ["genome_router"]
 genome_router = APIRouter(prefix="/genomes")
 
 
-@genome_router.get("")
-async def genomes_list(db: DatabaseDependency) -> tuple[m.GenomeWithURIs, ...]:
+@genome_router.get("", dependencies=[authz_middleware.dep_public_endpoint()])
+async def genomes_list(
+    db: DatabaseDependency, response_format: str | None = None
+) -> tuple[m.GenomeWithURIs, ...] | tuple[str, ...]:
+    genomes = await db.get_genomes()
+    if response_format == "id_list":
+        return tuple(g.id for g in genomes)
+    # else, format as full response
     return await db.get_genomes()
 
 

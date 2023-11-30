@@ -5,13 +5,11 @@
 
 export ASGI_APP="bento_reference_service.app:app"
 
-if [[ -z "${INTERNAL_PORT}" ]]; then
-  # Set default internal port to 5000
-  export INTERNAL_PORT=5000
-fi
+# Set default internal port to 5000
+: "${INTERNAL_PORT:=5000}"
 
 python -m poetry install
-python -m debugpy --listen 0.0.0.0:5678 -m \
+python -m debugpy --listen 0.0.0.0:9511 -m \
   uvicorn \
   --host 0.0.0.0 \
   --port "${INTERNAL_PORT}" \

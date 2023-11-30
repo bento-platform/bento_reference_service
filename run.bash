@@ -2,10 +2,8 @@
 
 export ASGI_APP="bento_reference_service.app:app"
 
-if [[ -z "${INTERNAL_PORT}" ]]; then
-  # Set default internal port to 5000
-  export INTERNAL_PORT=5000
-fi
+# Set default internal port to 5000
+: "${INTERNAL_PORT:=5000}"
 
 uvicorn \
   --workers 1 \

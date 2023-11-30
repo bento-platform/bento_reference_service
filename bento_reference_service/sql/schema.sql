@@ -9,14 +9,14 @@ CREATE TABLE IF NOT EXISTS genomes (
 );
 
 CREATE TABLE IF NOT EXISTS genome_aliases (
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes ON DELETE CASCADE,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes ON DELETE CASCADE,
     alias VARCHAR(31) NOT NULL,
     naming_authority VARCHAR(63) NOT NULL,
     PRIMARY KEY (genome_id, alias)
 );
 
 CREATE TABLE IF NOT EXISTS genome_contigs (
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes ON DELETE CASCADE,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes ON DELETE CASCADE,
     contig_name VARCHAR(31) NOT NULL,
     contig_length INTEGER NOT NULL,
     circular BOOLEAN NOT NULL DEFAULT FALSE,  -- Whether this sequence is circular, e.g., the mitochondrial genome
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS genome_contigs (
 );
 
 CREATE TABLE IF NOT EXISTS genome_contig_aliases (
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes ON DELETE CASCADE,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes ON DELETE CASCADE,
     contig_name VARCHAR(63) NOT NULL,
     alias VARCHAR(63) NOT NULL,
     naming_authority VARCHAR(63) NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_types (
     type_id VARCHAR(63) NOT NULL PRIMARY KEY,  -- Term ID from the Sequence Ontology
 );
 CREATE TABLE IF NOT EXISTS genome_feature_type_synonyms (
-    type_id VARCHAR(63) NOT NULL FOREIGN KEY REFERENCES genome_feature_types,
+    type_id VARCHAR(63) NOT NULL REFERENCES genome_feature_types,
     synonym VARCHAR(63) NOT NULL UNIQUE,
     PRIMARY KEY (type_id, synonym)
 );
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_type_synonyms (
 CREATE TYPE strand_type AS ENUM ('negative', 'positive', 'unknown', 'not_stranded');
 
 CREATE TABLE IF NOT EXISTS genome_features (
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
     -- Feature location information, on the genome:
     contig_name VARCHAR(63) NOT NULL,
     start_pos INTEGER NOT NULL, -- 1-based, inclusive
@@ -79,7 +79,7 @@ CREATE INDEX IF NOT EXISTS genome_features_position_text_trgm_gin ON genome_feat
 -- in GFF3 files, features can have one or multiple parents within the same annotation file
 --  - facilitate this via a many-to-many table
 CREATE TABLE IF NOT EXISTS genome_feature_parents (
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
     feature_id VARCHAR(63) NOT NULL,
     parent_id VARCHAR(63) NOT NULL,
     FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features,
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_parents (
 -- these are 'non-parent' annotations
 CREATE TABLE IF NOT EXISTS genome_feature_annotations (
     annotation_id SERIAL PRIMARY KEY,
-    genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
     feature_id VARCHAR(63) NOT NULL,
     attr_tag VARCHAR(63) NOT NULL,
     attr_val VARCHAR(63) NOT NULL,

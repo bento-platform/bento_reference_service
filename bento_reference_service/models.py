@@ -1,6 +1,4 @@
-from pathlib import Path
 from pydantic import BaseModel
-
 from typing import TypedDict
 
 __all__ = [

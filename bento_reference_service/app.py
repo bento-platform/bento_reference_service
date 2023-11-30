@@ -6,7 +6,7 @@ from bento_lib.responses.fastapi_errors import (
     http_exception_handler_factory,
     validation_exception_handler_factory,
 )
-from bento_lib.service_info import SERVICE_ORGANIZATION_C3G, build_service_info
+from bento_lib.service_info.helpers import build_service_info_from_pydantic_config
 
 from . import __version__
 from .authz import authz_middleware
@@ -53,24 +53,15 @@ app.exception_handler(RequestValidationError)(validation_exception_handler_facto
 
 @app.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
 async def service_info(config: ConfigDependency, logger: LoggerDependency):
-    return await build_service_info(
+    return await build_service_info_from_pydantic_config(
+        config,
+        logger,
         {
-            "id": config.service_id,
-            "name": config.service_name,  # TODO: Should be globally unique?
-            "type": SERVICE_TYPE,
-            "description": config.service_description,
-            "organization": SERVICE_ORGANIZATION_C3G,
-            "contactUrl": config.service_contact_url,
-            "version": __version__,
-            "environment": "prod",
-            "bento": {
-                "serviceKind": BENTO_SERVICE_KIND,
-                "dataService": False,
-                "workflowProvider": True,
-                "gitRepository": "https://github.com/bento-platform/bento_reference_service",
-            },
+            "serviceKind": BENTO_SERVICE_KIND,
+            "dataService": False,
+            "workflowProvider": True,
+            "gitRepository": "https://github.com/bento-platform/bento_reference_service",
         },
-        debug=config.bento_debug,
-        local=config.bento_container_local,
-        logger=logger,
+        SERVICE_TYPE,
+        __version__,
     )

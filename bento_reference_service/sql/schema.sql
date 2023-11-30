@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS genome_features (
     phase TINYINT,
     -- Keys:
     PRIMARY KEY (genome_id, feature_id),
-    FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs,
+    FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs
 );
 CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin ON genome_features USING (feature_name gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS genome_features_position_text_trgm_gin ON genome_features USING (position_text gin_trgm_ops);
@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS genome_feature_annotations (
     genome_id VARCHAR(31) NOT NULL FOREIGN KEY REFERENCES genomes,
     feature_id VARCHAR(63) NOT NULL,
     attr_tag VARCHAR(63) NOT NULL,
-    attr_val VARCHAR(63) NOT NULL
+    attr_val VARCHAR(63) NOT NULL,
+    FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
 );
 CREATE INDEX IF NOT EXISTS annotations_genome_feature_attr_idx
     ON genome_feature_other_annotations

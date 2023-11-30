@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS genome_contig_aliases (
 -- Features are in GFF3 format, i.e., terms from the Sequence Ontology
 -- See https://github.com/The-Sequence-Ontology/SO-Ontologies
 CREATE TABLE IF NOT EXISTS genome_feature_types (
-    type_id VARCHAR(63) NOT NULL PRIMARY KEY,  -- Term ID from the Sequence Ontology
+    type_id VARCHAR(63) NOT NULL PRIMARY KEY  -- Term ID from the Sequence Ontology
 );
 CREATE TABLE IF NOT EXISTS genome_feature_type_synonyms (
     type_id VARCHAR(63) NOT NULL REFERENCES genome_feature_types,
@@ -65,16 +65,16 @@ CREATE TABLE IF NOT EXISTS genome_features (
     --    however, let's not support this, since it becomes tricky and doesn't help us much for our use cases.
     feature_id VARCHAR(63) NOT NULL,
     feature_name TEXT NOT NULL,
-    feature_type VARCHAR(15) NOT NULL FOREIGN KEY REFERENCES genome_feature_types,
+    feature_type VARCHAR(15) NOT NULL REFERENCES genome_feature_types,
     source TEXT NOT NULL,
     score FLOAT,
-    phase TINYINT,
+    phase SMALLINT,
     -- Keys:
     PRIMARY KEY (genome_id, feature_id),
     FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs
 );
-CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin ON genome_features USING (feature_name gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS genome_features_position_text_trgm_gin ON genome_features USING (position_text gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin ON genome_features USING GIN (feature_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS genome_features_position_text_trgm_gin ON genome_features USING GIN (position_text gin_trgm_ops);
 
 -- in GFF3 files, features can have one or multiple parents within the same annotation file
 --  - facilitate this via a many-to-many table
@@ -97,5 +97,4 @@ CREATE TABLE IF NOT EXISTS genome_feature_annotations (
     FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
 );
 CREATE INDEX IF NOT EXISTS annotations_genome_feature_attr_idx
-    ON genome_feature_other_annotations
-    USING (genome_id, feature_id, attr_tag);
+    ON genome_feature_annotations (genome_id, feature_id, attr_tag);

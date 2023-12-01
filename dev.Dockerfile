@@ -7,7 +7,6 @@ WORKDIR /reference
 COPY pyproject.toml .
 COPY poetry.lock .
 
-COPY entrypoint.bash .
 COPY run.dev.bash .
 
 # Install production + development dependencies
@@ -20,5 +19,4 @@ RUN poetry config virtualenvs.create false && \
 ENV BENTO_CONTAINER_LOCAL=true
 
 # Don't copy in actual code, since it'll be mounted in via volume for development
-CMD [ "bash", "./entrypoint.bash" ]
-ENTRYPOINT [ "bash", "./run.dev.bash" ]
+CMD [ "bash", "./run.dev.bash" ]

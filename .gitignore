@@ -7,3 +7,5 @@ data/*
 !data/.gitkeep
 
 pg_data
+
+.coverage

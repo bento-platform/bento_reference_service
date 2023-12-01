@@ -7,6 +7,7 @@ workflow fasta_ref {
         String access_token
         String drs_url
         String reference_url
+        String validate_ssl
     }
 
     call uncompress_fasta_and_generate_fai_if_needed as s1 {
@@ -15,11 +16,19 @@ workflow fasta_ref {
     }
 
     call ingest_into_drs as drs_fasta {
-        input: file = s1.fasta_bgzip, access_token = access_token
+        input:
+            file = s1.fasta_bgzip,
+            drs_url = drs_url,
+            access_token = access_token,
+            validate_ssl = validate_ssl
     }
 
     call ingest_into_drs as drs_fai {
-        input: file = s1.fai, access_token = access_token
+        input:
+            file = s1.fai,
+            drs_url = drs_url,
+            access_token = access_token,
+            validate_ssl = validate_ssl
     }
 
     call ingest_metadata_into_ref {
@@ -54,15 +63,32 @@ task uncompress_fasta_and_generate_fai_if_needed {
 task ingest_into_drs {
     input {
         File file
+        String drs_url
         String access_token
+        Boolean validate_ssl
     }
 
     command <<<
-        TODO: ingest + output DRS URI
+        drs_res=$(
+            curl ~{true="" false="-k" validate_ssl} \
+                -X POST \
+                -F "file=@~{file}" \
+                -F "project_id=$project_id" \
+                -F "dataset_id=$dataset_id" \
+                -H "Authorization: Bearer ~{access_token}" \
+                --fail-with-body \
+                "~{drs_url}/ingest"
+        )
+        exit_code=$?
+        if [[ "${exit_code}" == 0 ]]; then
+            jq -r '.id' <<< "${drs_res}"
+        else
+            exit "${exit_code}"
+        fi
     >>>
 
     output {
-        String drs_uri = "TODO"
+        String drs_uri = read_string(stdout())
     }
 }
 
@@ -92,7 +118,7 @@ task ingest_metadata_into_ref {
     >>>
 
     output {
-        String out = stdout()
-        String err = stderr()
+        File out = stdout()
+        File err = stderr()
     }
 }

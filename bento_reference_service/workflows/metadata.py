@@ -24,6 +24,7 @@ workflow_set.add_workflow(
             wm.WorkflowSecretInput(id="access_token", key="access_token"),
             wm.WorkflowServiceUrlInput(id="drs_url", service_kind="drs"),
             wm.WorkflowServiceUrlInput(id="reference_url", service_kind="reference"),
+            wm.WorkflowConfigInput(id="validate_ssl", key="validate_ssl"),
             # User-specified
             wm.WorkflowStringInput(id="genome_id"),
             wm.WorkflowFileInput(id="genome_fasta", pattern=r"^.*\.(fa|fa.gz|fas|fas.gz|fasta|fasta.gz)$"),

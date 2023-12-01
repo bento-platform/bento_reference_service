@@ -3,7 +3,7 @@
 # Set .gitconfig for development
 /set_gitconfig.bash
 
-export ASGI_APP="bento_reference_service.app:app"
+export ASGI_APP="bento_reference_service.main:app"
 
 # Set default internal port to 5000
 : "${INTERNAL_PORT:=5000}"

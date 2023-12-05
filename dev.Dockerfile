@@ -1,5 +1,16 @@
 FROM ghcr.io/bento-platform/bento_base_image:python-debian-2023.12.01
 
+LABEL org.opencontainers.image.description="Local development image for the Bento reference service."
+LABEL devcontainer.metadata='[{ \
+  "remoteUser": "bento_user", \
+  "customizations": { \
+    "vscode": { \
+      "extensions": ["ms-python.python", "eamodio.gitlens"], \
+      "settings": {"workspaceFolder": "/reference"} \
+    } \
+  } \
+}]'
+
 # FastAPI uses uvicorn for a development server as well
 RUN pip install --upgrade pip && pip install --no-cache-dir "uvicorn[standard]==0.24.0"
 WORKDIR /reference

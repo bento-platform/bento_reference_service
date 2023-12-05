@@ -8,7 +8,7 @@ export ASGI_APP="bento_reference_service.main:app"
 # Set default internal port to 5000
 : "${INTERNAL_PORT:=5000}"
 
-python -m debugpy --listen 0.0.0.0:9511 -m \
+python -Xfrozen_modules=off -m debugpy --listen 0.0.0.0:9511 -m \
   uvicorn \
   --host 0.0.0.0 \
   --port "${INTERNAL_PORT}" \

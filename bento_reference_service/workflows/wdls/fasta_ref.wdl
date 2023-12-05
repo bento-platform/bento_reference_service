@@ -17,7 +17,7 @@ workflow fasta_ref {
 
     call ingest_into_drs as drs_fasta {
         input:
-            file = s1.fasta_bgzip,
+            file = s1.fasta,
             drs_url = drs_url,
             access_token = access_token,
             validate_ssl = validate_ssl

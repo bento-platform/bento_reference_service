@@ -75,6 +75,7 @@ task ingest_into_drs {
                 -F "file=@~{file}" \
                 -F "project_id=$project_id" \
                 -F "dataset_id=$dataset_id" \
+                -F "public=true" \
                 -H "Authorization: Bearer ~{access_token}" \
                 --fail-with-body \
                 "~{drs_url}/ingest"

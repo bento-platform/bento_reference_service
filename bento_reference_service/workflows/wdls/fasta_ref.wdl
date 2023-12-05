@@ -7,7 +7,7 @@ workflow fasta_ref {
         String access_token
         String drs_url
         String reference_url
-        String validate_ssl
+        Boolean validate_ssl
     }
 
     call uncompress_fasta_and_generate_fai_if_needed as s1 {

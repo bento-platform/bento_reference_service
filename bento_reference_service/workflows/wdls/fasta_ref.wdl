@@ -3,6 +3,7 @@ version 1.0
 workflow fasta_ref {
     input {
         String genome_id
+        String taxon_term_json
         File genome_fasta
         String access_token
         String drs_url
@@ -34,6 +35,7 @@ workflow fasta_ref {
     call ingest_metadata_into_ref {
         input:
             genome_id = genome_id,
+            taxon_term_json = taxon_term_json,
             fasta = s1.fasta,
             fai = s1.fai,
             fasta_drs_uri = drs_fasta.drs_uri,
@@ -101,6 +103,7 @@ task ingest_into_drs {
 task ingest_metadata_into_ref {
     input {
         String genome_id
+        String taxon_term_json
         File fasta
         File fai
         String fasta_drs_uri
@@ -111,7 +114,7 @@ task ingest_metadata_into_ref {
 
     command <<<
         fasta-checksum-utils '~{fasta}' --fai '~{fai}' --genome-id '~{genome_id}' --out-format bento-json | \
-          jq '.fasta = "~{fasta_drs_uri}" | .fai = "~{fai_drs_uri}"' > metadata.json
+          jq '.fasta = "~{fasta_drs_uri}" | .fai = "~{fai_drs_uri}" | .taxon = ~{taxon_term_json}' > metadata.json
 
         rm '~{fasta}' '~{fai}'
 

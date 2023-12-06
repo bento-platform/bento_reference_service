@@ -5,7 +5,9 @@ CREATE TABLE IF NOT EXISTS genomes (
     md5_checksum VARCHAR(32) NOT NULL UNIQUE,  -- Hexadecimal string representation of MD5 checksum bytes
     ga4gh_checksum VARCHAR(63) NOT NULL UNIQUE,  -- GA4GH/VRS/RefGet 2-formatted checksum: SQ.(truncated SHA12, B64)
     fasta_uri TEXT NOT NULL UNIQUE,  -- Can be a local file URI, an S3 URI, a DRS URI, or an HTTPS resource.
-    fai_uri TEXT NOT NULL UNIQUE -- Corresponding .fa.fai for the FASTA. See fasta_uri for what this can be.
+    fai_uri TEXT NOT NULL UNIQUE, -- Corresponding .fa.fai for the FASTA. See fasta_uri for what this can be.
+    taxon_id VARCHAR(32) NOT NULL,  -- e.g., NCBITaxon:9606
+    taxon_label VARCHAR(32) NOT NULL  -- e.g., Homo sapiens
 );
 
 CREATE TABLE IF NOT EXISTS genome_aliases (

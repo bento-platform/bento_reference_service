@@ -3,6 +3,7 @@ from typing import TypedDict
 
 __all__ = [
     "GTFFeature",
+    "OntologyTerm",
     "Alias",
     "Contig",
     "ContigWithRefgetURI",

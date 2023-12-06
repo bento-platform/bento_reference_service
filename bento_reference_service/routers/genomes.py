@@ -26,8 +26,9 @@ async def genomes_list(
 
 
 @genome_router.post("")
-async def genomes_create(db: DatabaseDependency, genome: m.Genome) -> m.GenomeWithURIs:
+async def genomes_create(db: DatabaseDependency, genome: m.Genome, request: Request) -> m.GenomeWithURIs:
     if g := await db.create_genome(genome):
+        authz_middleware.mark_authz_done(request)
         return g
     else:  # pragma: no cover
         raise HTTPException(

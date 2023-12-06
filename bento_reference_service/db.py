@@ -1,4 +1,5 @@
 import asyncpg
+import json
 from bento_lib.db.pg_async import PgAsyncDatabase
 from fastapi import Depends
 from functools import lru_cache
@@ -6,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, AsyncIterator
 
 from .config import Config, ConfigDependency
-from .models import Alias, ContigWithRefgetURI, Genome, GenomeWithURIs
+from .models import Alias, ContigWithRefgetURI, Genome, GenomeWithURIs, OntologyTerm
 
 
 SCHEMA_PATH = Path(__file__).parent / "sql" / "schema.sql"
@@ -30,8 +31,8 @@ class Database(PgAsyncDatabase):
             name=rec["contig_name"],
             # aliases is [None] if no aliases defined:
             aliases=tuple(map(Database.deserialize_alias, filter(None, rec["aliases"]))),
-            md5=rec["md5_checksum"],
-            ga4gh=rec["ga4gh_checksum"],
+            md5=md5,
+            ga4gh=ga4gh,
             length=rec["contig_length"],
             circular=rec["circular"],
             refget_uris=(
@@ -50,11 +51,12 @@ class Database(PgAsyncDatabase):
             # aliases is [None] if no aliases defined:
             aliases=tuple(map(Database.deserialize_alias, filter(None, rec["aliases"]))),
             uri=f"{service_base_url}/genomes/{rec['id']}",
-            contigs=tuple(map(self.deserialize_contig, rec["contigs"])),
+            contigs=tuple(map(self.deserialize_contig, json.loads(rec["contigs"]))),
             md5=rec["md5_checksum"],
             ga4gh=rec["ga4gh_checksum"],
             fasta=rec["fasta_uri"],
             fai=rec["fai_uri"],
+            taxon=OntologyTerm(id=rec["taxon_id"], label=rec["taxon_label"]),
         )
 
     async def _select_genomes(self, g_id: str | None = None) -> AsyncIterator[GenomeWithURIs]:
@@ -64,11 +66,11 @@ class Database(PgAsyncDatabase):
             res = await conn.fetch(
                 f"""
                 SELECT
-                    id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri,
+                    id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri, taxon_id, taxon_label,
                     array(
                         SELECT json_agg(ga.*) FROM genome_aliases ga WHERE g.id = ga.genome_id
                     ) aliases,
-                    array(
+                    (
                         WITH contigs_tmp AS (
                             SELECT
                                 contig_name, contig_length, circular, md5_checksum, ga4gh_checksum,
@@ -116,9 +118,9 @@ class Database(PgAsyncDatabase):
             async with conn.transaction():
                 # Create the genome record:
                 await conn.execute(
-                    "INSERT INTO genomes (id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri) "
-                    "VALUES ($1, $2, $3, $4, $5)",
-                    g.id, g.md5, g.ga4gh, g.fasta, g.fai,
+                    "INSERT INTO genomes (id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri, taxon_id, taxon_label) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    g.id, g.md5, g.ga4gh, g.fasta, g.fai, g.taxon.id, g.taxon.label
                 )
 
                 # Create records for each genome alias:

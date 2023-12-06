@@ -28,7 +28,8 @@ class Database(PgAsyncDatabase):
         ga4gh = rec["ga4gh_checksum"]
         return ContigWithRefgetURI(
             name=rec["contig_name"],
-            aliases=tuple(map(Database.deserialize_alias, rec["aliases"])),
+            # aliases is [None] if no aliases defined:
+            aliases=tuple(map(Database.deserialize_alias, filter(None, rec["aliases"]))),
             md5=rec["md5_checksum"],
             ga4gh=rec["ga4gh_checksum"],
             length=rec["contig_length"],
@@ -46,7 +47,8 @@ class Database(PgAsyncDatabase):
         service_base_url = self._config.service_url_base_path.rstrip("/")
         return GenomeWithURIs(
             id=rec["id"],
-            aliases=tuple(map(Database.deserialize_alias, rec["aliases"])),
+            # aliases is [None] if no aliases defined:
+            aliases=tuple(map(Database.deserialize_alias, filter(None, rec["aliases"]))),
             uri=f"{service_base_url}/genomes/{rec['id']}",
             contigs=tuple(map(self.deserialize_contig, rec["contigs"])),
             md5=rec["md5_checksum"],

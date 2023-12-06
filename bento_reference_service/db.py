@@ -120,7 +120,13 @@ class Database(PgAsyncDatabase):
                 await conn.execute(
                     "INSERT INTO genomes (id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri, taxon_id, taxon_label) "
                     "VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                    g.id, g.md5, g.ga4gh, g.fasta, g.fai, g.taxon.id, g.taxon.label
+                    g.id,
+                    g.md5,
+                    g.ga4gh,
+                    g.fasta,
+                    g.fai,
+                    g.taxon.id,
+                    g.taxon.label,
                 )
 
                 # Create records for each genome alias:

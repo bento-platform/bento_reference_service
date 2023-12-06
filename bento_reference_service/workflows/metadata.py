@@ -27,16 +27,17 @@ workflow_set.add_workflow(
             wm.WorkflowConfigInput(id="validate_ssl", key="validate_ssl"),
             # User-specified
             wm.WorkflowStringInput(
-                id="genome_id", help="Standard unique ID for this genome; e.g., hg38, GRCH38, UrsMar_1.0"),
+                id="genome_id", help="Standard unique ID for this genome; e.g., hg38, GRCH38, UrsMar_1.0"
+            ),
             wm.WorkflowStringInput(
                 id="taxon_term_json",
                 help=(
                     "Phenopackets-style JSON representation for an NCBITaxon ontology term; for example: <br />"
-                    "<code>{\"id\":\"NCBITaxon:9606\",\"label\":\"Homo sapiens\"}</code> <br />"
-                    "<code>{\"id\":\"NCBITaxon:3847\",\"label\":\"Glycine max\"}</code> <br />"
-                    "<code>{\"id\":\"NCBITaxon:871304\",\"label\":\"Lymantria dispar asiatica\"}</code> <br />"
-                    "<code>{\"id\":\"NCBITaxon:7460\",\"label\":\"Apis mellifera\"}</code> <br />"
-                    "<code>{\"id\":\"NCBITaxon:29073\",\"label\":\"Ursus maritimus\"}</code>"
+                    '<code>{"id":"NCBITaxon:9606","label":"Homo sapiens"}</code> <br />'
+                    '<code>{"id":"NCBITaxon:3847","label":"Glycine max"}</code> <br />'
+                    '<code>{"id":"NCBITaxon:871304","label":"Lymantria dispar asiatica"}</code> <br />'
+                    '<code>{"id":"NCBITaxon:7460","label":"Apis mellifera"}</code> <br />'
+                    '<code>{"id":"NCBITaxon:29073","label":"Ursus maritimus"}</code>'
                 ),
             ),  # NCBITaxon:#####
             wm.WorkflowFileInput(

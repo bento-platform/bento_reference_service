@@ -101,7 +101,7 @@ class Database(PgAsyncDatabase):
         async with self.connect() as conn:
             # TODO: these SQL statements could be optimized into one for performance reasons if it becomes necessary
             contig_res = await conn.fetchrow(
-                "SELECT * FROM genome_contigs WHERE md5_checksum = $1 OR ga4gh_checksum = $1", (chk_norm,)
+                "SELECT * FROM genome_contigs WHERE md5_checksum = $1 OR ga4gh_checksum = $1", chk_norm
             )
             genome_res = (await anext(self._select_genomes(contig_res["genome_id"]), None)) if contig_res else None
             if genome_res is None or contig_res is None:
@@ -116,7 +116,7 @@ class Database(PgAsyncDatabase):
                 await conn.execute(
                     "INSERT INTO genomes (id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri) "
                     "VALUES ($1, $2, $3, $4, $5)",
-                    (g.id, g.md5, g.ga4gh, g.fasta, g.fai),
+                    g.id, g.md5, g.ga4gh, g.fasta, g.fai,
                 )
 
                 # Create records for each genome alias:

@@ -38,14 +38,14 @@ class Alias(BaseModel):
 
 class Contig(BaseModel):
     name: str
-    aliases: tuple[Alias, ...]
+    aliases: tuple[Alias, ...] = ()
 
     # checksums for sequence (content-based addressing)
     md5: str
     ga4gh: str
 
     length: int  # Length of sequence
-    circular: bool
+    circular: bool = False
 
 
 class ContigWithRefgetURI(Contig):
@@ -54,8 +54,7 @@ class ContigWithRefgetURI(Contig):
 
 class Genome(BaseModel):
     id: str
-    aliases: tuple[Alias, ...]
-    # uri: str
+    aliases: tuple[Alias, ...] = ()
 
     # checksums for FASTA
     md5: str

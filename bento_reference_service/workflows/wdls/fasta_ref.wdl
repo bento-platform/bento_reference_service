@@ -89,7 +89,7 @@ task ingest_into_drs {
         exit_code=$?
         rm '~{file}'
         if [[ "${exit_code}" == 0 ]]; then
-            jq -r '.id' <<< "${drs_res}"
+            jq -r '.self_uri' <<< "${drs_res}"
         else
             exit "${exit_code}"
         fi

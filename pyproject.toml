@@ -27,7 +27,7 @@ classifiers = [
 python = "^3.10.0"
 fastapi = "^0.104.1"
 pydantic = "^2.5.1"
-bento-lib = {version = "11.0.0a2", extras = ["fastapi"]}
+bento-lib = {version = "11.0.0a3", extras = ["fastapi"]}
 aiofiles = "^23.2.1"
 pysam = "^0.22.0"
 jsonschema = "^4.19.2"

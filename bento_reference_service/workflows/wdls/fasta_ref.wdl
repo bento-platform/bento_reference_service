@@ -13,6 +13,7 @@ workflow fasta_ref {
 
     call uncompress_fasta_and_generate_fai_if_needed as s1 {
         input:
+            genome_id = genome_id,
             genome_fasta = genome_fasta
     }
 
@@ -47,22 +48,23 @@ workflow fasta_ref {
 
 task uncompress_fasta_and_generate_fai_if_needed {
     input {
+        String genome_id
         File genome_fasta
     }
 
     command <<<
         if [[ '~{genome_fasta}' == *.gz ]]; then
-            gunzip -c '~{genome_fasta}' > genome.fasta
+            gunzip -c '~{genome_fasta}' > '~{genome_id}.fasta'
             rm '~{genome_fasta}'
         else
-            mv '~{genome_fasta}' genome.fasta
+            mv '~{genome_fasta}' '~{genome_id}.fasta'
         fi
-        samtools faidx genome.fasta --fai-idx genome.fasta.fai
+        samtools faidx '~{genome_id}.fasta' --fai-idx '~{genome_id}.fasta.fai'
     >>>
 
     output {
-        File fasta = "genome.fasta"
-        File fai = "genome.fasta.fai"
+        File fasta = "${genome_id}.fasta"
+        File fai = "${genome_id}.fasta.fai"
     }
 }
 

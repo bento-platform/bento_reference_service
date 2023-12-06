@@ -33,6 +33,9 @@ workflow fasta_ref {
 
     call ingest_metadata_into_ref {
         input:
+            genome_id = genome_id,
+            fasta = s1.fasta,
+            fai = s1.fai,
             fasta_drs_uri = drs_fasta.drs_uri,
             fai_drs_uri = drs_fai.drs_uri,
             reference_url = reference_url,
@@ -48,8 +51,9 @@ task uncompress_fasta_and_generate_fai_if_needed {
     command <<<
         if [[ '~{genome_fasta}' == *.gz ]]; then
             gunzip -c '~{genome_fasta}' > genome.fasta
+            rm '~{genome_fasta}'
         else
-            cp '~{genome_fasta}' genome.fasta
+            mv '~{genome_fasta}' genome.fasta
         fi
         samtools faidx genome.fasta --fai-idx genome.fasta.fai
     >>>
@@ -81,6 +85,7 @@ task ingest_into_drs {
                 "~{drs_url}/ingest"
         )
         exit_code=$?
+        rm '~{file}'
         if [[ "${exit_code}" == 0 ]]; then
             jq -r '.id' <<< "${drs_res}"
         else
@@ -95,6 +100,9 @@ task ingest_into_drs {
 
 task ingest_metadata_into_ref {
     input {
+        String genome_id
+        File fasta
+        File fai
         String fasta_drs_uri
         String fai_drs_uri
         String reference_url
@@ -102,19 +110,21 @@ task ingest_metadata_into_ref {
     }
 
     command <<<
-        fasta-checksum-utils genome.fa.gz --genome-id GRCh38 --out-format bento-json | \
+        fasta-checksum-utils '~{fasta}' --fai '~{fai}' --genome-id '~{genome_id}' --out-format bento-json | \
           jq '.fasta = "~{fasta_drs_uri}" | .fai = "~{fai_drs_uri}"' > metadata.json
+
+        rm '~{fasta}' '~{fai}'
 
         RESPONSE=$(curl -X POST -k -s -w "%{http_code}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ~{token}" \
-            --data "@metadatajson" \
+            --data "@metadata.json" \
             "~{reference_url}/genomes")
-        if [[ "${RESPONSE}" != "204" ]]
-        then
+        if [[ "${RESPONSE}" != "204" ]]; then
             echo "Error: Reference service replied with ${RESPONSE}" 1>&2  # to stderr
             exit 1
         fi
+
         echo ${RESPONSE}
     >>>
 

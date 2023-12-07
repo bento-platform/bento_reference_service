@@ -241,13 +241,13 @@ tests-no-zope = ["cloudpickle", "hypothesis", "mypy (>=1.1.1)", "pympler", "pyte
 
 [[package]]
 name = "bento-lib"
-version = "11.0.0a3"
+version = "11.0.1"
 description = "A set of common utilities and helpers for Bento platform services."
 optional = false
 python-versions = ">=3.10.0"
 files = [
-    {file = "bento_lib-11.0.0a3-py3-none-any.whl", hash = "sha256:73a3b8840a4722e6e5a247ea2011714d1dabe807a5cb8fcaf7b363f2a1ebf231"},
-    {file = "bento_lib-11.0.0a3.tar.gz", hash = "sha256:216b586b91d52fec11ba9488a49b32effb71e1bd1ac059af4a382360650e4ffb"},
+    {file = "bento_lib-11.0.1-py3-none-any.whl", hash = "sha256:8978d829e4799c545327006177693a277c053f6d7e4698df70a30c9856cee5e5"},
+    {file = "bento_lib-11.0.1.tar.gz", hash = "sha256:5857ac8ecaf04ced03510664adf9e40cb749e748e1f4c2e0684646e8c816b37a"},
 ]
 
 [package.dependencies]
@@ -256,7 +256,7 @@ fastapi = {version = ">=0.104,<0.105", optional = true, markers = "extra == \"fa
 jsonschema = ">=4.20.0,<5"
 psycopg2-binary = ">=2.9.9,<3.0"
 pydantic = ">=2.5.2,<3"
-pydantic-settings = {version = ">=2.1.0,<3", optional = true, markers = "extra == \"fastapi\""}
+pydantic-settings = ">=2.1.0,<3"
 redis = ">=5.0.1,<6"
 requests = ">=2.31.0,<3"
 Werkzeug = ">=2.2.3,<4"
@@ -264,7 +264,7 @@ Werkzeug = ">=2.2.3,<4"
 [package.extras]
 asyncpg = ["asyncpg (>=0.29.0,<0.30.0)"]
 django = ["Django (>=4.2.7,<5)", "djangorestframework (>=3.14.0,<3.15)"]
-fastapi = ["fastapi (>=0.104,<0.105)", "pydantic-settings (>=2.1.0,<3)"]
+fastapi = ["fastapi (>=0.104,<0.105)"]
 flask = ["Flask (>=2.2.5,<4)"]
 
 [[package]]
@@ -1789,4 +1789,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10.0"
-content-hash = "23bb08f96d7cea63f5d5b76df3d09443a8ee8d4a4aa067c6686f3fedee203b9c"
+content-hash = "fba1f20469a645678b95cbd3e4b14b7c86cac340bdac488a335fa3372c4ae818"

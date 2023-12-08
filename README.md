@@ -11,6 +11,14 @@ Reference data (genomes &amp; annotations) service for the Bento platform.
 * Facilitate project-specific ingestion of reference genomes
 * Implement the [RefGet](http://samtools.github.io/hts-specs/refget.html) specification for obtaining sequence data
 
+## Status
+
+* Bento-style genome ingestion: **DONE**
+* API endpoint permissions: _Partially done_
+* RefGet implementation: _Partially done_
+* Annotation service: **Not done**
+* Tests: **Not done**
+
 ## API
 
 TODO

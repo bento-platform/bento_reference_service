@@ -8,6 +8,7 @@ from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..constants import RANGE_HEADER_PATTERN
 from ..db import DatabaseDependency
+from ..logger import LoggerDependency
 from ..models import Alias
 from ..streaming import stream_from_uri, generate_uri_streaming_response
 
@@ -45,14 +46,14 @@ def parse_fai(fai_data: bytes) -> dict[str, tuple[int, int, int, int]]:
 @refget_router.get("/{sequence_checksum}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def refget_sequence(
     config: ConfigDependency,
+    logger: LoggerDependency,
     db: DatabaseDependency,
     request: Request,
-    response: Response,
     sequence_checksum: str,
     start: int | None = None,
     end: int | None = None,
 ):
-    response.headers["Content-Type"] = REFGET_HEADER_TEXT_WITH_CHARSET
+    headers = {"Content-Type": REFGET_HEADER_TEXT_WITH_CHARSET, "Accept-Ranges": "bytes"}
 
     accept_header: str | None = request.headers.get("Accept", None)
     if accept_header and accept_header not in (
@@ -60,7 +61,8 @@ async def refget_sequence(
         REFGET_HEADER_TEXT,
         "text/plain",
     ):
-        raise HTTPException(status_code=406, detail="Not Acceptable")  # TODO: plain text error
+        # TODO: plain text error:
+        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Not Acceptable")
 
     # Don't use FastAPI's auto-Header tool for the Range header
     # 'cause I don't want to shadow Python's range() function
@@ -86,7 +88,8 @@ async def refget_sequence(
 
     # Fetch FAI so we can index into FASTA, properly translating the range header for the contig along the way.
     with io.BytesIO() as fb:
-        async for chunk in (await stream_from_uri(config, genome.fai, None)):
+        _, stream = await stream_from_uri(config, genome.fai, None, impose_response_limit=False)
+        async for chunk in stream:
             fb.write(chunk)
         fb.seek(0)
         fai_data = fb.read()
@@ -102,7 +105,7 @@ async def refget_sequence(
 
     if start is not None:
         if end is not None:
-            response.headers["Accept-Ranges"] = "none"
+            headers["Accept-Ranges"] = "none"
             if start > end:
                 if not contig.circular:
                     raise HTTPException(
@@ -141,7 +144,9 @@ async def refget_sequence(
         )  # TODO: what is real error?
 
     # TODO: correct range: accounting for offsets in file from FAI
-    return generate_uri_streaming_response(config, genome.fasta, "TODO", "text/x-fasta")
+    return generate_uri_streaming_response(
+        config, logger, genome.fasta, "TODO", "text/x-fasta", headers, impose_response_limit=True
+    )
 
 
 class RefGetSequenceMetadata(BaseModel):

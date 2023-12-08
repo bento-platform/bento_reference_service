@@ -5,6 +5,7 @@ from .. import models as m
 from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..db import DatabaseDependency
+from ..logger import LoggerDependency
 from ..streaming import generate_uri_streaming_response
 
 
@@ -25,7 +26,7 @@ async def genomes_list(
     return genomes
 
 
-@genome_router.post("")
+@genome_router.post("")  # TODO: permissions
 async def genomes_create(db: DatabaseDependency, genome: m.Genome, request: Request) -> m.GenomeWithURIs:
     if g := await db.create_genome(genome):
         authz_middleware.mark_authz_done(request)
@@ -43,7 +44,7 @@ async def genomes_create(db: DatabaseDependency, genome: m.Genome, request: Requ
 
 @genome_router.get("/{genome_id}.fa", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_fasta(
-    genome_id: str, config: ConfigDependency, db: DatabaseDependency, request: Request
+    genome_id: str, config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request
 ) -> StreamingResponse:
     genome: m.Genome = await db.get_genome(genome_id)
 
@@ -53,22 +54,37 @@ async def genomes_detail_fasta(
     # Don't use FastAPI's auto-Header tool for the Range header
     # 'cause I don't want to shadow Python's range() function
     range_header: str | None = request.headers.get("Range", None)
-    return await generate_uri_streaming_response(config, genome.fasta, range_header, "text/x-fasta")
+    return await generate_uri_streaming_response(
+        config,
+        logger,
+        genome.fasta,
+        range_header,
+        "text/x-fasta",
+        impose_response_limit=False,
+        extra_response_headers={"Accept-Ranges": "bytes"},
+    )
 
 
 @genome_router.get("/{genome_id}.fa.fai", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_fasta_index(
-    genome_id: str, config: ConfigDependency, db: DatabaseDependency, request: Request
+    genome_id: str, config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request
 ) -> StreamingResponse:
     genome: m.Genome = await db.get_genome(genome_id)
 
     if genome is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 
-    # Don't use FastAPI's auto-Header tool for the Range header
-    # 'cause I don't want to shadow Python's range() function
+    # Don't use FastAPI's auto-Header tool for the Range header 'cause I don't want to shadow Python's range() function:
     range_header: str | None = request.headers.get("Range", None)
-    return await generate_uri_streaming_response(config, genome.fasta, range_header, "text/plain")
+    return await generate_uri_streaming_response(
+        config,
+        logger,
+        genome.fasta,
+        range_header,
+        "text/plain",
+        impose_response_limit=False,
+        extra_response_headers={"Accept-Ranges": "bytes"},
+    )
 
 
 @genome_router.get("/{genome_id}", dependencies=[authz_middleware.dep_public_endpoint()])

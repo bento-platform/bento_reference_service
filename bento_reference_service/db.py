@@ -98,6 +98,11 @@ class Database(PgAsyncDatabase):
     async def get_genome(self, g_id: str, external_resource_uris: bool = False) -> GenomeWithURIs | None:
         return await anext(self._select_genomes(g_id, external_resource_uris), None)
 
+    async def delete_genome(self, g_id: str) -> None:
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            await conn.execute("DELETE FROM genomes WHERE id = $1", g_id)
+
     async def get_genome_and_contig_by_checksum_str(
         self, checksum_str: str
     ) -> tuple[GenomeWithURIs, ContigWithRefgetURI] | None:

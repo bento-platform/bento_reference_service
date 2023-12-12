@@ -94,6 +94,14 @@ async def genomes_detail(genome_id: str, db: DatabaseDependency) -> m.GenomeWith
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 
 
+@genome_router.delete("/{genome_id}", status_code=status.HTTP_204_NO_CONTENT)  # TODO: permissions
+async def genomes_delete(genome_id: str, db: DatabaseDependency):
+    if await db.get_genome(genome_id):
+        await db.delete_genome(genome_id)
+        return
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
+
+
 @genome_router.get("/{genome_id}/contigs", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_contigs(genome_id: str, db: DatabaseDependency) -> tuple[m.ContigWithRefgetURI, ...]:
     if g := await db.get_genome(genome_id, external_resource_uris=True):

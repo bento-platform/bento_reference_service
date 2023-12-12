@@ -68,7 +68,7 @@ async def stream_file(
         raise StreamingBadRange()
 
     if yield_content_length_as_first_8:
-        yield file_size.to_bytes(8)
+        yield file_size.to_bytes(8, "big")
 
     async with aiofiles.open(path, "rb") as ff:
         # Logic mostly ported from bento_drs
@@ -114,7 +114,7 @@ async def stream_http(
                 raise StreamingProxyingError(f"Error while streaming {url}: {res.status} {err_content}")
 
             if yield_content_length_as_first_8:
-                yield int(res.headers["Content-Length"]).to_bytes(8)
+                yield int(res.headers["Content-Length"]).to_bytes(8, "big")
             async for chunk in res.content.iter_chunked(config.file_response_chunk_size):
                 yield chunk
 

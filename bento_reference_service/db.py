@@ -56,7 +56,7 @@ class Database(PgAsyncDatabase):
             md5=rec["md5_checksum"],
             ga4gh=rec["ga4gh_checksum"],
             fasta=f"{genome_uri}.fa" if external_resource_uris else rec["fasta_uri"],
-            fai=f"{genome_uri}.fai" if external_resource_uris else rec["fai_uri"],
+            fai=f"{genome_uri}.fa.fai" if external_resource_uris else rec["fai_uri"],
             taxon=OntologyTerm(id=rec["taxon_id"], label=rec["taxon_label"]),
         )
 

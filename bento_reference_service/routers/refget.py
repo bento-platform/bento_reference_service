@@ -74,7 +74,7 @@ async def refget_sequence(
             status_code=status.HTTP_400_BAD_REQUEST, detail="cannot specify both start/end and Range header"
         )
 
-    res = await db.get_genome_id_and_contig_by_checksum_str(sequence_checksum)
+    res = await db.get_genome_and_contig_by_checksum_str(sequence_checksum)
 
     if res is None:
         # TODO: proper 404 for refget spec
@@ -166,7 +166,7 @@ async def refget_sequence_metadata(
     response: Response,
     sequence_checksum: str,
 ) -> RefGetSequenceMetadataResponse:
-    res: tuple[str, models.ContigWithRefgetURI] | None = await db.get_genome_id_and_contig_by_checksum_str(
+    res: tuple[str, models.ContigWithRefgetURI] | None = await db.get_genome_and_contig_by_checksum_str(
         sequence_checksum
     )
 

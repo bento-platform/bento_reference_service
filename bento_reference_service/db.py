@@ -44,22 +44,23 @@ class Database(PgAsyncDatabase):
             ),
         )
 
-    def deserialize_genome(self, rec: asyncpg.Record) -> GenomeWithURIs:
+    def deserialize_genome(self, rec: asyncpg.Record, external_resource_uris: bool) -> GenomeWithURIs:
         service_base_url = self._config.service_url_base_path.rstrip("/")
+        genome_uri = f"{service_base_url}/genomes/{rec['id']}"
         return GenomeWithURIs(
             id=rec["id"],
             # aliases is [None] if no aliases defined:
             aliases=tuple(map(Database.deserialize_alias, filter(None, rec["aliases"]))),
-            uri=f"{service_base_url}/genomes/{rec['id']}",
+            uri=genome_uri,
             contigs=tuple(map(self.deserialize_contig, json.loads(rec["contigs"]))),
             md5=rec["md5_checksum"],
             ga4gh=rec["ga4gh_checksum"],
-            fasta=rec["fasta_uri"],
-            fai=rec["fai_uri"],
+            fasta=f"{genome_uri}.fa" if external_resource_uris else rec["fasta_uri"],
+            fai=f"{genome_uri}.fai" if external_resource_uris else rec["fai_uri"],
             taxon=OntologyTerm(id=rec["taxon_id"], label=rec["taxon_label"]),
         )
 
-    async def _select_genomes(self, g_id: str | None = None) -> AsyncIterator[GenomeWithURIs]:
+    async def _select_genomes(self, g_id: str | None, external_resource_uris: bool) -> AsyncIterator[GenomeWithURIs]:
         conn: asyncpg.Connection
         async with self.connect() as conn:
             where_clause = "WHERE g.id = $1" if g_id is not None else ""
@@ -88,16 +89,16 @@ class Database(PgAsyncDatabase):
                 *((g_id,) if g_id is not None else ()),
             )
 
-            for r in map(self.deserialize_genome, res):
+            for r in map(lambda g: self.deserialize_genome(g, external_resource_uris), res):
                 yield r
 
-    async def get_genomes(self) -> tuple[GenomeWithURIs, ...]:
-        return tuple([r async for r in self._select_genomes()])
+    async def get_genomes(self, external_resource_uris: bool = False) -> tuple[GenomeWithURIs, ...]:
+        return tuple([r async for r in self._select_genomes(None, external_resource_uris)])
 
-    async def get_genome(self, g_id: str) -> GenomeWithURIs | None:
-        return await anext(self._select_genomes(g_id), None)
+    async def get_genome(self, g_id: str, external_resource_uris: bool = False) -> GenomeWithURIs | None:
+        return await anext(self._select_genomes(g_id, external_resource_uris), None)
 
-    async def get_genome_id_and_contig_by_checksum_str(
+    async def get_genome_and_contig_by_checksum_str(
         self, checksum_str: str
     ) -> tuple[GenomeWithURIs, ContigWithRefgetURI] | None:
         chk_norm: str = checksum_str.rstrip("ga4gh:").rstrip("md5:")  # strip optional checksum prefixes if present
@@ -107,12 +108,14 @@ class Database(PgAsyncDatabase):
             contig_res = await conn.fetchrow(
                 "SELECT * FROM genome_contigs WHERE md5_checksum = $1 OR ga4gh_checksum = $1", chk_norm
             )
-            genome_res = (await anext(self._select_genomes(contig_res["genome_id"]), None)) if contig_res else None
+            genome_res = (
+                (await anext(self._select_genomes(contig_res["genome_id"], False), None)) if contig_res else None
+            )
             if genome_res is None or contig_res is None:
                 return None
             return genome_res, self.deserialize_contig(contig_res)
 
-    async def create_genome(self, g: Genome) -> GenomeWithURIs | None:
+    async def create_genome(self, g: Genome, return_external_resource_uris: bool) -> GenomeWithURIs | None:
         conn: asyncpg.Connection
         async with self.connect() as conn:
             async with conn.transaction():
@@ -160,7 +163,7 @@ class Database(PgAsyncDatabase):
                         contig_alias_tuples,
                     )
 
-        return await self.get_genome(g.id)
+        return await self.get_genome(g.id, external_resource_uris=return_external_resource_uris)
 
 
 @lru_cache()

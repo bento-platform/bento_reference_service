@@ -19,7 +19,7 @@ genome_router = APIRouter(prefix="/genomes")
 async def genomes_list(
     db: DatabaseDependency, response_format: str | None = None
 ) -> tuple[m.GenomeWithURIs, ...] | tuple[str, ...]:
-    genomes = await db.get_genomes()
+    genomes = await db.get_genomes(external_resource_uris=True)
     if response_format == "id_list":
         return tuple(g.id for g in genomes)
     # else, format as full response
@@ -28,7 +28,7 @@ async def genomes_list(
 
 @genome_router.post("")  # TODO: permissions
 async def genomes_create(db: DatabaseDependency, genome: m.Genome, request: Request) -> m.GenomeWithURIs:
-    if g := await db.create_genome(genome):
+    if g := await db.create_genome(genome, return_external_resource_uris=True):
         authz_middleware.mark_authz_done(request)
         return g
     else:  # pragma: no cover
@@ -46,7 +46,7 @@ async def genomes_create(db: DatabaseDependency, genome: m.Genome, request: Requ
 async def genomes_detail_fasta(
     genome_id: str, config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request
 ) -> StreamingResponse:
-    genome: m.Genome = await db.get_genome(genome_id)
+    genome: m.Genome = await db.get_genome(genome_id, external_resource_uris=False)  # need internal FASTA URI
 
     if genome is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
@@ -69,7 +69,7 @@ async def genomes_detail_fasta(
 async def genomes_detail_fasta_index(
     genome_id: str, config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request
 ) -> StreamingResponse:
-    genome: m.Genome = await db.get_genome(genome_id)
+    genome: m.Genome = await db.get_genome(genome_id, external_resource_uris=False)  # need internal FAI URI
 
     if genome is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")

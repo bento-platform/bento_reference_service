@@ -31,23 +31,28 @@ async def db_cleanup(db: Database):
     yield
     conn: asyncpg.Connection
     async with db.connect() as conn:
-        await conn.execute("""
+        await conn.execute(
+            """
         DROP INDEX genome_features_feature_name_trgm_gin;
         DROP INDEX genome_features_position_text_trgm_gin;
         DROP INDEX annotations_genome_feature_attr_idx;
 
-        DROP TABLE genomes;
-        DROP TABLE genome_aliases;
-        DROP TABLE genome_contigs;
-        DROP TABLE genome_contig_aliases;
-        DROP TABLE genome_feature_types;
-        DROP TABLE genome_feature_type_synonyms;
-        DROP TABLE genome_features;
-        DROP TABLE genome_feature_parents;
         DROP TABLE genome_feature_annotations;
+        DROP TABLE genome_feature_parents;
+        DROP TABLE genome_features;
+        
+        DROP TABLE genome_feature_type_synonyms;
+        DROP TABLE genome_feature_types;
+        
+        DROP TABLE genome_contig_aliases;
+        DROP TABLE genome_contigs;
+        
+        DROP TABLE genome_aliases;
+        DROP TABLE genomes;
 
         DROP TYPE strand_type;
-        """)
+        """
+        )
     await db.close()
 
 

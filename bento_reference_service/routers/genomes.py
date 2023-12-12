@@ -89,14 +89,14 @@ async def genomes_detail_fasta_index(
 
 @genome_router.get("/{genome_id}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail(genome_id: str, db: DatabaseDependency) -> m.GenomeWithURIs:
-    if g := await db.get_genome(genome_id):
+    if g := await db.get_genome(genome_id, external_resource_uris=True):
         return g
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 
 
 @genome_router.get("/{genome_id}/contigs", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_contigs(genome_id: str, db: DatabaseDependency) -> tuple[m.ContigWithRefgetURI, ...]:
-    if g := await db.get_genome(genome_id):
+    if g := await db.get_genome(genome_id, external_resource_uris=True):
         return g.contigs
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 
@@ -105,7 +105,7 @@ async def genomes_detail_contigs(genome_id: str, db: DatabaseDependency) -> tupl
 async def genomes_detail_contig_detail(
     genome_id: str, contig_name: str, db: DatabaseDependency
 ) -> m.ContigWithRefgetURI:
-    genome: m.GenomeWithURIs | None = await db.get_genome(genome_id)
+    genome: m.GenomeWithURIs | None = await db.get_genome(genome_id, external_resource_uris=True)
     if genome is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 

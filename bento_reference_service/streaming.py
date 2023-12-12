@@ -182,7 +182,7 @@ async def stream_from_uri(
             raise StreamingUnsupportedURIScheme(parsed_uri.scheme)
 
     # Content length should be the first 8 bytes of the stream
-    content_length = int.from_bytes(await anext(stream))
+    content_length = int.from_bytes(await anext(stream), "big")
 
     if impose_response_limit and content_length > config.response_substring_limit:
         raise StreamingResponseExceededLimit()

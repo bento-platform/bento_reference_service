@@ -160,7 +160,9 @@ async def stream_from_uri(
                 except ValueError:
                     raise StreamingBadRange()
 
-            stream = stream_file(config, pathlib.Path(parsed_uri.path), start, end)
+            stream = stream_file(
+                config, pathlib.Path(parsed_uri.path), start, end, yield_content_length_as_first_8=True
+            )
 
         case "drs" | "http" | "https":
             # Proxy request to HTTP(S) URL, but override media type

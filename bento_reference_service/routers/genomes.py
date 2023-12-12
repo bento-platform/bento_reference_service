@@ -26,7 +26,7 @@ async def genomes_list(
     return genomes
 
 
-@genome_router.post("")  # TODO: permissions
+@genome_router.post("", status_code=status.HTTP_201_CREATED)  # TODO: permissions
 async def genomes_create(db: DatabaseDependency, genome: m.Genome, request: Request) -> m.GenomeWithURIs:
     if g := await db.create_genome(genome, return_external_resource_uris=True):
         authz_middleware.mark_authz_done(request)

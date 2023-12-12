@@ -42,6 +42,10 @@ class StreamingResponseExceededLimit(Exception):
     pass
 
 
+class StreamingBadURI(Exception):
+    pass
+
+
 class StreamingUnsupportedURIScheme(Exception):
     pass
 
@@ -134,7 +138,12 @@ async def stream_from_uri(
 ) -> tuple[int, AsyncIterator[bytes]]:
     stream: AsyncIterator[bytes]
 
-    match (parsed_uri := urlparse(original_uri)).scheme:
+    try:
+        parsed_uri = urlparse(original_uri)
+    except ValueError:
+        raise StreamingBadURI(f"Bad URI: {original_uri}")
+
+    match parsed_uri.scheme:
         case "file":
             start: int = 0
             end: int | None = None
@@ -213,10 +222,10 @@ async def generate_uri_streaming_response(
         logger.error(f"Encountered streaming error for {uri}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     except StreamingUnsupportedURIScheme as e:  # Unsupported URI scheme
-        err = f"Unsupported URI scheme in genome record: {str(e)}"
+        err = f"Unsupported URI scheme in genome record: {e}"
         logger.error(err)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=err)
-    except ValueError as e:  # URI parsing error
-        err = f"Bad URI in genome record: {uri} ({str(e)})"
+    except StreamingBadURI as e:  # URI parsing error
+        err = f"Bad URI in genome record: {e}"
         logger.error(err)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=err)

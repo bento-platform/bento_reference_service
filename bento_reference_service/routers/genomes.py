@@ -79,7 +79,7 @@ async def genomes_detail_fasta_index(
     return await generate_uri_streaming_response(
         config,
         logger,
-        genome.fasta,
+        genome.fai,
         range_header,
         "text/plain",
         impose_response_limit=False,

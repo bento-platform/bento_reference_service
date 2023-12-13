@@ -3,6 +3,7 @@ import asyncpg
 import pytest
 import pytest_asyncio
 
+from aioresponses import aioresponses
 from fastapi.testclient import TestClient
 from typing import AsyncGenerator
 
@@ -72,3 +73,9 @@ def event_loop(request):
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+@pytest.fixture
+def aioresponse():
+    with aioresponses() as m:
+        yield m

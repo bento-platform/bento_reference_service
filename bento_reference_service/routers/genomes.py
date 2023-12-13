@@ -1,3 +1,7 @@
+import asyncpg
+
+from bento_lib.auth.permissions import P_INGEST_REFERENCE_MATERIAL, P_DELETE_REFERENCE_MATERIAL
+from bento_lib.auth.resources import RESOURCE_EVERYTHING
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
@@ -26,7 +30,15 @@ async def genomes_list(
     return genomes
 
 
-@genome_router.post("", status_code=status.HTTP_201_CREATED)  # TODO: permissions
+@genome_router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        authz_middleware.dep_require_permissions_on_resource(
+            frozenset({P_INGEST_REFERENCE_MATERIAL}), RESOURCE_EVERYTHING
+        )
+    ],
+)
 async def genomes_create(db: DatabaseDependency, genome: m.Genome, request: Request) -> m.GenomeWithURIs:
     if g := await db.create_genome(genome, return_external_resource_uris=True):
         authz_middleware.mark_authz_done(request)
@@ -94,7 +106,15 @@ async def genomes_detail(genome_id: str, db: DatabaseDependency) -> m.GenomeWith
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 
 
-@genome_router.delete("/{genome_id}", status_code=status.HTTP_204_NO_CONTENT)  # TODO: permissions
+@genome_router.delete(
+    "/{genome_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        authz_middleware.dep_require_permissions_on_resource(
+            frozenset({P_DELETE_REFERENCE_MATERIAL}), RESOURCE_EVERYTHING
+        )
+    ],
+)
 async def genomes_delete(genome_id: str, db: DatabaseDependency):
     if await db.get_genome(genome_id):
         await db.delete_genome(genome_id)

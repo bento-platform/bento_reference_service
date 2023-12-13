@@ -241,18 +241,18 @@ tests-no-zope = ["cloudpickle", "hypothesis", "mypy (>=1.1.1)", "pympler", "pyte
 
 [[package]]
 name = "bento-lib"
-version = "11.0.1"
+version = "11.1.0"
 description = "A set of common utilities and helpers for Bento platform services."
 optional = false
 python-versions = ">=3.10.0"
 files = [
-    {file = "bento_lib-11.0.1-py3-none-any.whl", hash = "sha256:8978d829e4799c545327006177693a277c053f6d7e4698df70a30c9856cee5e5"},
-    {file = "bento_lib-11.0.1.tar.gz", hash = "sha256:5857ac8ecaf04ced03510664adf9e40cb749e748e1f4c2e0684646e8c816b37a"},
+    {file = "bento_lib-11.1.0-py3-none-any.whl", hash = "sha256:18426d2408b79c82b1907390da48c3ec32d680c159d40cbe996f194e19446e4d"},
+    {file = "bento_lib-11.1.0.tar.gz", hash = "sha256:88c492ada8b657eccf8163f023ffee43b5ee98c502de8e2cfe1458975f9f8906"},
 ]
 
 [package.dependencies]
 aiohttp = ">=3.9.1,<4"
-fastapi = {version = ">=0.104,<0.105", optional = true, markers = "extra == \"fastapi\""}
+fastapi = {version = ">=0.104,<0.106", optional = true, markers = "extra == \"fastapi\""}
 jsonschema = ">=4.20.0,<5"
 psycopg2-binary = ">=2.9.9,<3.0"
 pydantic = ">=2.5.2,<3"
@@ -264,7 +264,7 @@ Werkzeug = ">=2.2.3,<4"
 [package.extras]
 asyncpg = ["asyncpg (>=0.29.0,<0.30.0)"]
 django = ["Django (>=4.2.7,<5)", "djangorestframework (>=3.14.0,<3.15)"]
-fastapi = ["fastapi (>=0.104,<0.105)"]
+fastapi = ["fastapi (>=0.104,<0.106)"]
 flask = ["Flask (>=2.2.5,<4)"]
 
 [[package]]
@@ -604,13 +604,13 @@ test = ["pytest (>=6)"]
 
 [[package]]
 name = "fastapi"
-version = "0.104.1"
+version = "0.105.0"
 description = "FastAPI framework, high performance, easy to learn, fast to code, ready for production"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "fastapi-0.104.1-py3-none-any.whl", hash = "sha256:752dc31160cdbd0436bb93bad51560b57e525cbb1d4bbf6f4904ceee75548241"},
-    {file = "fastapi-0.104.1.tar.gz", hash = "sha256:e5e4540a7c5e1dcfbbcf5b903c234feddcdcd881f191977a1c5dfd917487e7ae"},
+    {file = "fastapi-0.105.0-py3-none-any.whl", hash = "sha256:f19ebf6fdc82a3281d10f2cb4774bdfa90238e3b40af3525a0c09fd08ad1c480"},
+    {file = "fastapi-0.105.0.tar.gz", hash = "sha256:4d12838819aa52af244580675825e750ad67c9df4614f557a769606af902cf22"},
 ]
 
 [package.dependencies]
@@ -1793,4 +1793,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10.0"
-content-hash = "fba1f20469a645678b95cbd3e4b14b7c86cac340bdac488a335fa3372c4ae818"
+content-hash = "dbb2a5c525f8abb477497aee1e985f3eb73e461503991ef653c2f807261c0897"

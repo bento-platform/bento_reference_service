@@ -40,13 +40,19 @@ async def genomes_list(
     ],
 )
 async def genomes_create(db: DatabaseDependency, genome: m.Genome, request: Request) -> m.GenomeWithURIs:
-    if g := await db.create_genome(genome, return_external_resource_uris=True):
-        authz_middleware.mark_authz_done(request)
-        return g
-    else:  # pragma: no cover
+    try:
+        if g := await db.create_genome(genome, return_external_resource_uris=True):
+            authz_middleware.mark_authz_done(request)
+            return g
+        else:  # pragma: no cover
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Could not find genome with ID {genome.id} after creation",
+            )
+    except asyncpg.exceptions.UniqueViolationError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not find genome with ID {genome.id} after creation",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Genome with ID {genome.id} already exists",
         )
 
 

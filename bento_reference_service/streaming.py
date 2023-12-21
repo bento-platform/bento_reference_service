@@ -126,10 +126,10 @@ async def stream_http(
 
 async def drs_bytes_url_from_uri(config: Config, logger: logging.Logger, drs_uri: str) -> str:
     async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
-        async with session.get(decode_drs_uri(drs_uri)) as res:
+        async with session.get(decoded_uri := decode_drs_uri(drs_uri)) as res:
             if res.status != status.HTTP_200_OK:
                 logger.error(
-                    f"Error encountered while accessing DRS record: {drs_uri}; got "
+                    f"Error encountered while accessing DRS record: {drs_uri} (decoded to {decoded_uri}); got "
                     f"{res.status} {(await res.content.read()).decode('utf-8')}"
                 )
                 raise HTTPException(
@@ -139,7 +139,7 @@ async def drs_bytes_url_from_uri(config: Config, logger: logging.Logger, drs_uri
 
             drs_obj = await res.json()
             # TODO: this doesn't support access IDs / the full DRS spec
-            logger.debug(f"{drs_uri}: got DRS response {json.dumps(drs_obj)}")
+            logger.debug(f"{drs_uri} (decoded to {decoded_uri}): got DRS response {json.dumps(drs_obj)}")
             https_access = next(filter(lambda am: am["type"] == "https", drs_obj.get("access_methods", [])), None)
             if https_access is None:
                 raise HTTPException(

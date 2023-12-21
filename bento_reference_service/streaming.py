@@ -168,7 +168,7 @@ async def stream_from_uri(
             # Proxy request to HTTP(S) URL, but override media type
 
             # If this is a DRS URI, we need to first fetch the DRS object record + parse out the access method
-            url = drs_bytes_url_from_uri(original_uri) if parsed_uri.scheme == "drs" else original_uri
+            url = await drs_bytes_url_from_uri(original_uri) if parsed_uri.scheme == "drs" else original_uri
 
             # Don't pass Authorization header to possibly external sources
             stream = stream_http(

@@ -1,3 +1,5 @@
+import functools
+
 import aiofiles
 import aiofiles.os
 import aiohttp
@@ -48,6 +50,11 @@ class StreamingBadURI(Exception):
 
 class StreamingUnsupportedURIScheme(Exception):
     pass
+
+
+@functools.cache
+def tcp_connector(config: Config) -> aiohttp.TCPConnector:
+    return aiohttp.TCPConnector(verify_ssl=config.bento_validate_ssl)
 
 
 async def stream_file(
@@ -101,7 +108,7 @@ async def stream_http(
     headers: dict[str, str],
     yield_content_length_as_first_8: bool = False,
 ) -> AsyncIterator[bytes]:
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
         async with session.get(url, headers=headers) as res:
             if res.status == status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE:
                 n_bytes = None
@@ -119,8 +126,8 @@ async def stream_http(
                 yield chunk
 
 
-async def drs_bytes_url_from_uri(drs_uri: str) -> str:
-    async with aiohttp.ClientSession() as session:
+async def drs_bytes_url_from_uri(config: Config, drs_uri: str) -> str:
+    async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
         async with session.get(decode_drs_uri(drs_uri)) as res:
             drs_obj = await res.json()
             # TODO: this doesn't support access IDs / the full DRS spec
@@ -168,7 +175,7 @@ async def stream_from_uri(
             # Proxy request to HTTP(S) URL, but override media type
 
             # If this is a DRS URI, we need to first fetch the DRS object record + parse out the access method
-            url = await drs_bytes_url_from_uri(original_uri) if parsed_uri.scheme == "drs" else original_uri
+            url = await drs_bytes_url_from_uri(config, original_uri) if parsed_uri.scheme == "drs" else original_uri
 
             # Don't pass Authorization header to possibly external sources
             stream = stream_http(

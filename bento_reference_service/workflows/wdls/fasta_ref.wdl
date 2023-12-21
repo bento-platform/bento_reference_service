@@ -125,7 +125,7 @@ task ingest_metadata_into_ref {
             -H "Authorization: Bearer ~{token}" \
             --data "@metadata.json" \
             "~{reference_url}/genomes")
-        if [[ "${RESPONSE}" != "201" ]]; then
+        if [[ "${RESPONSE}" != *201 ]]; then
             echo "Error: Reference service replied with ${RESPONSE}" 1>&2  # to stderr
             exit 1
         fi

@@ -1,6 +1,7 @@
 import aiofiles
 import aiofiles.os
 import aiohttp
+import json
 import logging
 import pathlib
 
@@ -123,12 +124,23 @@ async def stream_http(
                 yield chunk
 
 
-async def drs_bytes_url_from_uri(config: Config, drs_uri: str) -> str:
+async def drs_bytes_url_from_uri(config: Config, logger: logging.Logger, drs_uri: str) -> str:
     async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
         async with session.get(decode_drs_uri(drs_uri)) as res:
+            if res.status != status.HTTP_200_OK:
+                logger.error(
+                    f"Error encountered while accessing DRS record: {drs_uri}; got "
+                    f"{res.status} {(await res.content.read()).decode('utf-8')}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"A {res.status} error was encountered while accessing DRS record for genome",
+                )
+
             drs_obj = await res.json()
             # TODO: this doesn't support access IDs / the full DRS spec
-            https_access = next(filter(lambda am: am["type"] == "https", drs_obj["access_methods"]), None)
+            logger.debug(f"{drs_uri}: got DRS response {json.dumps(drs_obj)}")
+            https_access = next(filter(lambda am: am["type"] == "https", drs_obj.get("access_methods", [])), None)
             if https_access is None:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -138,7 +150,7 @@ async def drs_bytes_url_from_uri(config: Config, drs_uri: str) -> str:
 
 
 async def stream_from_uri(
-    config: Config, original_uri: str, range_header: str | None, impose_response_limit: bool
+    config: Config, logger: logging.Logger, original_uri: str, range_header: str | None, impose_response_limit: bool
 ) -> tuple[int, AsyncIterator[bytes]]:
     stream: AsyncIterator[bytes]
 
@@ -172,7 +184,11 @@ async def stream_from_uri(
             # Proxy request to HTTP(S) URL, but override media type
 
             # If this is a DRS URI, we need to first fetch the DRS object record + parse out the access method
-            url = await drs_bytes_url_from_uri(config, original_uri) if parsed_uri.scheme == "drs" else original_uri
+            url = (
+                await drs_bytes_url_from_uri(config, logger, original_uri)
+                if parsed_uri.scheme == "drs"
+                else original_uri
+            )
 
             # Don't pass Authorization header to possibly external sources
             stream = stream_http(
@@ -208,7 +224,7 @@ async def generate_uri_streaming_response(
     extra_response_headers: dict[str, str] | None = None,
 ):
     try:
-        content_length, stream = await stream_from_uri(config, uri, range_header, impose_response_limit)
+        content_length, stream = await stream_from_uri(config, logger, uri, range_header, impose_response_limit)
         return StreamingResponse(
             stream,
             headers={**(extra_response_headers or {}), "Content-Length": str(content_length)},

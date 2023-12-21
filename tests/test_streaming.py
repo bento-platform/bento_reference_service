@@ -34,7 +34,7 @@ async def test_http_streaming_404_1():
 async def test_http_streaming_404_2():
     with pytest.raises(s.StreamingProxyingError):
         _, stream = await s.stream_from_uri(
-            c.get_config(), "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/DOES_NOT_EXIST", None, False
+            c.get_config(), logger, "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/DOES_NOT_EXIST", None, False
         )
         await anext(stream)
 

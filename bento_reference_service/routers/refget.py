@@ -88,7 +88,7 @@ async def refget_sequence(
 
     # Fetch FAI so we can index into FASTA, properly translating the range header for the contig along the way.
     with io.BytesIO() as fb:
-        _, stream = await stream_from_uri(config, genome.fai, None, impose_response_limit=False)
+        _, stream = await stream_from_uri(config, logger, genome.fai, None, impose_response_limit=False)
         async for chunk in stream:
             fb.write(chunk)
         fb.seek(0)

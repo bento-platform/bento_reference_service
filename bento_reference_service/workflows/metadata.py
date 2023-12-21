@@ -36,6 +36,7 @@ workflow_set.add_workflow(
                     '<code>{"id":"NCBITaxon:9606","label":"Homo sapiens"}</code> <br />'
                     '<code>{"id":"NCBITaxon:3847","label":"Glycine max"}</code> <br />'
                     '<code>{"id":"NCBITaxon:871304","label":"Lymantria dispar asiatica"}</code> <br />'
+                    '<code>{"id":"NCBITaxon:86327","label":"Rangifer tarandus caribou"}</code> <br />'
                     '<code>{"id":"NCBITaxon:7460","label":"Apis mellifera"}</code> <br />'
                     '<code>{"id":"NCBITaxon:29073","label":"Ursus maritimus"}</code>'
                 ),

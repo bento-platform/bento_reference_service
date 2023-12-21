@@ -1,5 +1,3 @@
-import functools
-
 import aiofiles
 import aiofiles.os
 import aiohttp
@@ -52,7 +50,6 @@ class StreamingUnsupportedURIScheme(Exception):
     pass
 
 
-@functools.cache
 def tcp_connector(config: Config) -> aiohttp.TCPConnector:
     return aiohttp.TCPConnector(verify_ssl=config.bento_validate_ssl)
 

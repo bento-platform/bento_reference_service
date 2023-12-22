@@ -43,7 +43,7 @@ workflow_set.add_workflow(
             ),  # NCBITaxon:#####
             wm.WorkflowFileInput(
                 id="genome_fasta",
-                pattern=r"^.*\.(fa|fa.gz|fas|fas.gz|fasta|fasta.gz)$",
+                pattern=r"^.*\.(fa|fa.gz|fna|fna.gz|fas|fas.gz|fasta|fasta.gz)$",
                 help="FASTA file for the reference genome, either gzipped or uncompressed.",
             ),
         ],

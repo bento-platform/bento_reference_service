@@ -34,8 +34,8 @@ config_for_setup = get_config()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config_for_setup.cors_origins,
-    allow_headers=["Authorization"],
     allow_credentials=True,
+    allow_headers=["Authorization", "Cache-Control"],
     allow_methods=["*"],
 )
 

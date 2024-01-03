@@ -119,6 +119,8 @@ async def stream_http(
                 raise StreamingProxyingError(f"Error while streaming {url}: {res.status} {err_content}")
 
             if yield_content_length_as_first_8:
+                if "Content-Length" not in res.headers:
+                    raise StreamingProxyingError(f"Error while streaming {url}: missing Content-Length header")
                 yield int(res.headers["Content-Length"]).to_bytes(8, "big")
             async for chunk in res.content.iter_chunked(config.file_response_chunk_size):
                 yield chunk

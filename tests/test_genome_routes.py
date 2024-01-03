@@ -9,7 +9,7 @@ from .shared_data import SARS_COV_2_GENOME_ID, SARS_COV_2_FASTA_PATH, SARS_COV_2
 
 # all tests are async so that db_cleanup (an async fixture) properly works. not sure why it's this way.
 
-pytestmark = pytest.mark.asyncio(scope="module")
+pytestmark = pytest.mark.asyncio()
 
 
 async def test_genome_list(test_client: TestClient):

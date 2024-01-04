@@ -1,4 +1,4 @@
-FROM ghcr.io/bento-platform/bento_base_image:python-debian-2023.12.01
+FROM ghcr.io/bento-platform/bento_base_image:python-debian-2024.01.01
 
 LABEL org.opencontainers.image.description="Local development image for the Bento reference service."
 LABEL devcontainer.metadata='[{ \
@@ -12,7 +12,7 @@ LABEL devcontainer.metadata='[{ \
 }]'
 
 # FastAPI uses uvicorn for a development server as well
-RUN pip install --upgrade pip && pip install --no-cache-dir "uvicorn[standard]==0.24.0"
+RUN pip install --upgrade pip && pip install --no-cache-dir "uvicorn[standard]==0.25.0"
 WORKDIR /reference
 
 COPY pyproject.toml .

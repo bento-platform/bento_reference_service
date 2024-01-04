@@ -122,9 +122,12 @@ async def genomes_detail(genome_id: str, db: DatabaseDependency) -> m.GenomeWith
     ],
 )
 async def genomes_delete(genome_id: str, db: DatabaseDependency):
+    # TODO: also delete DRS objects!!
+
     if await db.get_genome(genome_id):
         await db.delete_genome(genome_id)
         return
+
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
 
 

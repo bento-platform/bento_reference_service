@@ -42,7 +42,8 @@ workflow fasta_ref {
             fasta_drs_uri = drs_fasta.drs_uri,
             fai_drs_uri = drs_fai.drs_uri,
             reference_url = reference_url,
-            token = access_token
+            token = access_token,
+            validate_ssl = validate_ssl
     }
 }
 
@@ -112,6 +113,7 @@ task ingest_metadata_into_ref {
         String fai_drs_uri
         String reference_url
         String token
+        Boolean validate_ssl
     }
 
     command <<<
@@ -120,17 +122,13 @@ task ingest_metadata_into_ref {
 
         rm '~{fasta}' '~{fai}'
 
-        RESPONSE=$(curl -X POST -k -s -w "%{http_code}" \
+        curl ~{true="" false="-k" validate_ssl} \
+            -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ~{token}" \
             --data "@metadata.json" \
-            "~{reference_url}/genomes")
-        if [[ "${RESPONSE}" != *201 ]]; then
-            echo "Error: Reference service replied with ${RESPONSE}" 1>&2  # to stderr
-            exit 1
-        fi
-
-        echo ${RESPONSE}
+            --fail-with-body \
+            "~{reference_url}/genomes"
     >>>
 
     output {

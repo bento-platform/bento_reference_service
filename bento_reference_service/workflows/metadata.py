@@ -27,7 +27,7 @@ workflow_set.add_workflow(
             wm.WorkflowConfigInput(id="validate_ssl", key="validate_ssl"),
             # User-specified
             wm.WorkflowStringInput(
-                id="genome_id", help="Standard unique ID for this genome; e.g., hg38, GRCH38, UrsMar_1.0"
+                id="genome_id", help="Standard unique ID for this genome; e.g., hg38, GRCh38, UrsMar_1.0"
             ),
             wm.WorkflowStringInput(
                 id="taxon_term_json",

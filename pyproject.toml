@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "bento_reference_service"
-version = "0.1.1"
+version = "0.1.2"
 description = "Reference data (genomes & annotations) service for the Bento platform."
 authors = [
     "David Lougheed <david.lougheed@mail.mcgill.ca>",
@@ -25,25 +25,25 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.10.0"
-fastapi = "^0.108.0"
-pydantic = "^2.5.1"
-bento-lib = {extras = ["fastapi"], version = "^11.2.0"}
+fastapi = "^0.109.2"
+pydantic = "^2.6.1"
+bento-lib = {extras = ["fastapi"], version = "^11.5.0"}
 aiofiles = "^23.2.1"
 pysam = "^0.22.0"
-jsonschema = "^4.19.2"
-pydantic-settings = "^2.0.3"
+jsonschema = "^4.21.1"
+pydantic-settings = "^2.1.0"
 asyncpg = "^0.29.0"
 
 [tool.poetry.group.dev.dependencies]
-coverage = "^7.4.0"
-pytest = "^7.4.0"
-pytest-cov = "^4.1.0"
-tox = "^4.11.3"
-debugpy = "^1.6.7.post1"
-black = "^23.12.1"
-httpx = "^0.26.0"
-pytest-asyncio = "^0.23.3"
 aioresponses = "^0.7.6"
+black = "^24.2.0"
+coverage = "^7.4.0"
+debugpy = "^1.8.1"
+httpx = "^0.26.0"
+pytest = "^7.4.4"
+pytest-asyncio = "^0.23.5"
+pytest-cov = "^4.1.0"
+tox = "^4.12.1"
 
 [tool.black]
 line_length = 120

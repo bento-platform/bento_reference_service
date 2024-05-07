@@ -1,3 +1,4 @@
+import itertools
 import logging
 import pysam
 import re
@@ -61,9 +62,11 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
 
 
 async def ingest_gene_feature_annotation(
+    # parameters:
     genome_id: str,
     gff_path: Path,
     gff_index_path: Path,
+    # dependencies:
     db: Database,
     logger: logging.Logger,
 ) -> None:
@@ -146,3 +149,8 @@ async def ingest_gene_feature_annotation(
 
         finally:
             gff.close()
+
+    features_to_ingest = _iter_features()
+
+    while data := tuple(itertools.islice(features_to_ingest, 1000)):  # take features in batches
+        await db.bulk_ingest_genome_features(data)

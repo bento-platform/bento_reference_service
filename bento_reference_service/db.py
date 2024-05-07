@@ -4,7 +4,7 @@ from bento_lib.db.pg_async import PgAsyncDatabase
 from fastapi import Depends
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, AsyncIterator
+from typing import Annotated, AsyncIterator, Iterable
 
 from .config import Config, ConfigDependency
 from .models import Alias, ContigWithRefgetURI, Genome, GenomeWithURIs, OntologyTerm, GenomeFeatureEntry, GenomeFeature
@@ -342,6 +342,10 @@ class Database(PgAsyncDatabase):
             )
 
         return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}
+
+    async def bulk_ingest_genome_features(self, features: Iterable[GenomeFeature]):
+        # TODO
+        pass
 
 
 @lru_cache()

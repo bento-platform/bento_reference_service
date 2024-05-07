@@ -5,6 +5,7 @@ workflow fasta_ref {
         String genome_id
         String taxon_term_json
         File genome_fasta
+        File? genome_gff3
         String access_token
         String drs_url
         String reference_url

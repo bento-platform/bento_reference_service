@@ -1,26 +1,18 @@
 from pydantic import BaseModel
-from typing import TypedDict
+from typing import Literal
 
 __all__ = [
-    "GTFFeature",
     "OntologyTerm",
     "Alias",
     "Contig",
     "ContigWithRefgetURI",
     "Genome",
     "GenomeWithURIs",
+    "GenomeFeatureEntry",
+    "GenomeFeature",
 ]
 
 # Pydantic/dict models, not database models
-
-
-class GTFFeature(TypedDict):
-    id: str
-    name: str
-    position: str
-    type: str
-    genome: str
-    strand: str
 
 
 class OntologyTerm(BaseModel):
@@ -75,3 +67,28 @@ class Genome(BaseModel):
 class GenomeWithURIs(Genome):
     uri: str
     contigs: tuple[ContigWithRefgetURI, ...]
+
+
+class GenomeFeatureEntry(BaseModel):
+    start_pos: int  # 1-based, inclusive
+    end_pos: int  # 1-based, exclusive
+    score: float | None
+    phase: int | None
+
+
+class GenomeFeature(BaseModel):
+    genome_id: str
+    contig_name: str
+
+    strand: Literal["negative", "positive", "unknown", "not_stranded"]
+
+    feature_id: str
+    feature_name: str
+    feature_type: str
+
+    source: str
+
+    entries: list[GenomeFeatureEntry]
+    annotations: dict[str, list[str]]
+
+    parents: tuple[str, ...]

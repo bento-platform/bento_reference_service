@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, AsyncIterator
 
 from .config import Config, ConfigDependency
-from .models import Alias, ContigWithRefgetURI, Genome, GenomeWithURIs, OntologyTerm
+from .models import Alias, ContigWithRefgetURI, Genome, GenomeWithURIs, OntologyTerm, GenomeFeatureEntry, GenomeFeature
 
 
 SCHEMA_PATH = Path(__file__).parent / "sql" / "schema.sql"
@@ -193,6 +193,155 @@ class Database(PgAsyncDatabase):
                     )
 
         return await self.get_genome(g.id, external_resource_uris=return_external_resource_uris)
+
+    async def genome_feature_types_summary(self, g_id: str):
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            res = await conn.fetch(
+                """
+                SELECT feature_type, COUNT(feature_type) as ft_count
+                FROM genome_features 
+                WHERE genome_id = $1 
+                GROUP BY feature_type
+            """,
+                g_id,
+            )
+
+        return {row["feature_type"]: row["ft_count"] for row in res}
+
+    @staticmethod
+    def deserialize_genome_feature_entry(rec: asyncpg.Record | dict) -> GenomeFeatureEntry:
+        return GenomeFeatureEntry(
+            start_pos=rec["start_pos"],
+            end_pos=rec["end_pos"],
+            score=rec["score"],
+            phase=rec["phase"],
+        )
+
+    @staticmethod
+    def deserialize_genome_feature(rec: asyncpg.Record) -> GenomeFeature:
+        return GenomeFeature(
+            genome_id=rec["genome_id"],
+            contig_name=rec["contig_name"],
+            strand=rec["strand"],
+            feature_id=rec["feature_id"],
+            feature_name=rec["feature_name"],
+            feature_type=rec["feature_type"],
+            source=rec["source"],
+            entries=tuple(map(Database.deserialize_genome_feature_entry, json.loads(rec["entries"]))),
+            annotations=json.loads(rec["annotations"]),  # TODO
+            parents=tuple(rec["parents"]),  # tuple of parent IDs
+        )
+
+    @staticmethod
+    def _feature_inner_entries_query(where_expr: str | None = None) -> str:
+        where_clause = f"AND {where_expr}" if where_expr else ""
+        return f"""
+        WITH entries_tmp AS (
+            SELECT start_pos, end_pos, score, phase FROM genome_feature_entries gfe
+            WHERE gfe.genome_id = gf.genome_id AND gfe.feature_id = gf.feature_id {where_clause}
+        ) 
+        SELECT jsonb_agg(entries_tmp.*) FROM entries_tmp
+        """
+
+    async def get_genome_features_by_ids(
+        self,
+        g_id: str,
+        f_ids: list[str],
+        offset: int = 0,
+        limit: int = 10,
+        existing_conn: asyncpg.Connection | None = None,
+    ):
+        final_query = f"""
+        SELECT
+            genome_id,
+            contig_name,
+            strand,
+            feature_id,
+            feature_name,
+            feature_type,
+            source,
+            ({self._feature_inner_entries_query()}) entries,
+            (
+                SELECT array_agg(gfp.parent_id) FROM genome_feature_parents gfp 
+                WHERE gfp.genome_id = gf.genome_id AND gfp.feature_id = gf.feature_id
+            ) parents
+        FROM genome_features gf
+        WHERE gf.genome_id = $1 AND feature_id IN $2
+        OFFSET $3 LIMIT $4
+        """
+
+        conn: asyncpg.Connection
+        async with self.connect(existing_conn) as conn:
+            final_res = await conn.fetch(final_query, g_id, f_ids, offset, limit)
+            return [self.deserialize_genome_feature(r) for r in final_res]
+
+    async def get_genome_feature_by_id(self, g_id: str, f_id: str) -> GenomeFeature | None:
+        res = await self.get_genome_features_by_ids(g_id, [f_id], 0, 1)
+        return res[0] if res else None
+
+    async def query_genome_features(
+        self,
+        g_id: str,
+        q: str | None,
+        name: str | None,
+        position: str | None,
+        start: int | None,
+        end: int | None,
+        feature_types: list[str] | None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> tuple[list[GenomeFeature], dict]:  # list of genome features + pagination dict object
+        gf_where_items: list[str] = []
+        gfe_where_items: list[str] = []
+        q_params: list[str | int] = []
+
+        def _q_param(pv: str | int) -> str:
+            q_params.append(pv)
+            return f"${len(gf_where_items) + 2}"
+
+        if q:
+            param = _q_param(q)
+            gf_where_items.append(f"(gf.feature_id ~ {param} OR gf.feature_name ~ {param})")
+
+        if name:
+            gf_where_items.append(f"gf.feature_name = {_q_param(name)}")
+
+        if position:
+            gfe_where_items.append(f"gfe.position_text ~ {_q_param(position)}")
+
+        if start is not None:
+            gfe_where_items.append(f"gfe.start_pos >= {_q_param(start)}")
+
+        if end is not None:
+            gfe_where_items.append(f"gfe.start_pos <= {_q_param(end)}")
+
+        if feature_types:
+            or_items = []
+            for ft in feature_types:
+                gf_where_items.append(f"gf.feature_type = f{_q_param(ft)}")
+            gf_where_items.append(f"({' OR '.join(or_items)})")
+
+        where_clause = " AND ".join(gf_where_items) if gf_where_items else "true"
+        gfe_where_clause = " AND ".join(gfe_where_items) if gfe_where_items else None
+
+        id_query = f"""
+        SELECT feature_id, ({self._feature_inner_entries_query(gfe_where_clause)}) entries 
+        FROM genome_features gf 
+        WHERE 
+            gf.genome_id = $1
+            AND jsonb_array_length(gf.entries) > 0
+            AND {where_clause};
+        """
+
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            id_res = await conn.fetch(id_query, g_id, *q_params)
+            final_list = await self.get_genome_features_by_ids(
+                g_id, [r["feature_id"] for r in id_res], offset, limit, conn
+            )
+
+        return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}
 
 
 @lru_cache()

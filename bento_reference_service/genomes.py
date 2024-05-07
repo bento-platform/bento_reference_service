@@ -2,9 +2,9 @@ import logging
 import pysam
 import re
 
-from elasticsearch.helpers import async_streaming_bulk
 from pathlib import Path
 from typing import Generator
+from urllib.parse import unquote as url_unquote
 
 from . import models as m
 from .db import Database
@@ -21,56 +21,49 @@ class AnnotationIngestError(Exception):
     pass
 
 
-def extract_feature_id_and_name(record) -> tuple[str | None, str | None]:
-    feature_type = record.feature
-    gene_id = record.gene_id
-    gene_name = record.attributes.get("gene_name", gene_id)
+def parse_attributes(raw_attributes: dict[str, str]) -> dict[str, list[str]]:
+    # See "attributes" in http://gmod.org/wiki/GFF3
+    return {k: [url_unquote(e) for e in v.split(",")] for k, v in raw_attributes.items()}
 
-    feature_id: str | None = None
-    feature_name: str | None = None
+
+def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None:
+    feature_type = record.feature
+    feature_name: str | None = attributes.get("Name", (None,))[0]
+
+    if feature_name:
+        return feature_name
+
+    transcript_id = attributes.get("transcript_id", (None,))[0]
+    transcript_name = attributes.get("transcript_name", (transcript_id,))[0]
 
     match feature_type:
         case "gene":
-            feature_id = gene_id
-            feature_name = gene_name
+            return attributes.get("gene_name", attributes.get("gene_id", (None,)))[0]
         case "transcript":
-            feature_id = record.transcript_id
-            feature_name = feature_id  # Explicitly re-use ID as name here
+            return attributes.get("transcript_name", attributes.get("transcript_id", (None,)))[0]
         case "5UTR" | "five_prime_utr":  # 5' untranslated region (UTR)
-            feature_id = f"{gene_id}-5UTR"
-            feature_name = f"{gene_name} 5' UTR"
+            return f"{transcript_name} 5' UTR"
         case "3UTR" | "three_prime_utr":  # 3' untranslated region (UTR)
-            feature_id = f"{gene_id}-3UTR"
-            feature_name = f"{gene_name} 3' UTR"
-        case "start_codon":  # TODO: multiple start codons may exist?
-            feature_id = f"{gene_id}-start_codon"
-            feature_name = f"{gene_name} start codon"
-        case "stop_codon":  # TODO: multiple stop codons may exist?
-            feature_id = f"{gene_id}-stop_codon"
-            feature_name = f"{gene_name} stop codon"
+            return f"{transcript_name} 3' UTR"
+        case "start_codon":
+            return f"{transcript_name} start codon"
+        case "stop_codon":
+            return f"{transcript_name} stop codon"
         case "exon":
-            feature_id = record.attributes["exon_id"]  # TODO: fallback with gene ID + exon number?
-            if "exon_number" in record.attributes:
-                # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
-                feature_name = f"{gene_name} exon {record.attributes['exon_number']}"
+            if "exon_id" in attributes:
+                return attributes["exon_id"][0]
             else:
-                feature_name = feature_id  # Explicitly re-use ID as name here
+                return attributes["ID"][0]
         case "CDS":  # coding sequence
-            exon_id = record.attributes["exon_id"]
-            feature_id = f"{exon_id}-CDS"
-            if "exon_number" in record.attributes:
-                # TODO: Validate this, I think slightly wrong because it uses gene vs. transcript
-                feature_name = f"{gene_name} exon {record.attributes['exon_number']} CDS"
-            else:
-                feature_name = f"{exon_id} CDS"  # Explicitly re-use ID as name here
-
-    return feature_id, feature_name
+            return f"{transcript_name} CDS"
+        case _:
+            return None
 
 
 async def ingest_gene_feature_annotation(
     genome_id: str,
-    gtf_annotation_path: Path,
-    gtf_annotation_index_path: Path,
+    gff_path: Path,
+    gff_index_path: Path,
     db: Database,
     logger: logging.Logger,
 ) -> None:
@@ -79,8 +72,8 @@ async def ingest_gene_feature_annotation(
     into the relevant .bentoGenome directory and ingests the annotations into an ElasticSearch index for fuzzy text
     querying of features.
     :param genome_id: The ID of the genome to attach the annotation to.
-    :param gtf_annotation_path: The path to an external GTF.gz-formatted annotation file to copy and read from.
-    :param gtf_annotation_index_path: The path to an external index file for the above .gtf.gz.
+    :param gff_path: The path to an external GTF.gz-formatted annotation file to copy and read from.
+    :param gff_index_path: The path to an external index file for the above .gtf.gz.
     :param db: Database connection/management object.
     :param logger: Python logger object.
     :return: None
@@ -91,18 +84,28 @@ async def ingest_gene_feature_annotation(
 
     genome: m.GenomeWithURIs | None = await db.get_genome(genome_id)
 
+    if genome is None:
+        raise AnnotationIngestError(f"Genome with ID {genome_id} not found")
+
     log_progress_interval = 1000
 
-    def _iter_features() -> Generator[m.GTFFeature, None, None]:
-        gtf = pysam.TabixFile(str(gtf_annotation_path), index=str(gtf_annotation_index_path))
+    def _iter_features() -> Generator[m.GenomeFeature, None, None]:
+        gff = pysam.TabixFile(str(gff_path), index=str(gff_index_path))
         total_processed: int = 0
         try:
+            features_by_id: dict[str, m.GenomeFeature] = {}
+
             for contig in genome.contigs:
                 logger.info(f"Indexing features from contig {contig.name}")
+                features_by_id.clear()
 
-                for record in gtf.fetch(contig.name, parser=pysam.asGTF()):
+                for record in gff.fetch(contig.name, parser=pysam.asGFF3()):
+                    # for some reason, dict(...) returns the attributes dict:
+                    record_attributes = parse_attributes(dict(record))
+
                     feature_type = record.feature
-                    feature_id, feature_name = extract_feature_id_and_name(record)
+                    feature_id = record_attributes.get("ID", (None,))[0]
+                    feature_name = extract_feature_name(record, record_attributes)
 
                     if feature_id is None:
                         logger.warning(f"Skipping unsupported feature (type={feature_type}, no ID retrieval): {record}")
@@ -112,23 +115,34 @@ async def ingest_gene_feature_annotation(
                         logger.warning(f"Using ID as name for feature: {record}")
                         feature_name = feature_id
 
-                    yield {
-                        "id": feature_id,
-                        "name": feature_name,
-                        "position": f"{contig.name}:{record.start}-{record.end}",
-                        "type": feature_type,
-                        "genome": genome_id,
-                        "strand": record.strand,
-                    }
+                    entry = m.GenomeFeatureEntry(
+                        start_pos=record.start,
+                        end_pos=record.end,
+                        score=record.score,
+                        phase=record.frame,  # misnamed in PySAM's GFF3 parser
+                    )
+
+                    if feature_id in features_by_id:
+                        features_by_id[feature_id].entries.append(entry)
+                    else:
+                        features_by_id[feature_id] = m.GenomeFeature(
+                            genome_id=genome_id,
+                            contig_name=contig.name,
+                            strand=record.strand,
+                            feature_id=feature_id,
+                            feature_name=feature_name,
+                            feature_type=feature_type,
+                            source=record.source,
+                            entries=[entry],
+                            attributes=record_attributes,
+                            parents=tuple(p for p in record_attributes.get("Parent", "").split(",") if p),
+                        )
 
                 total_processed += 1
                 if total_processed % log_progress_interval == 0:
                     logger.info(f"Processed {total_processed} features")
 
-        finally:
-            gtf.close()
+            yield from features_by_id.values()
 
-    async for ok, result in async_streaming_bulk(es, _iter_features()):
-        if not ok:
-            action, result = result.popitem()
-            raise AnnotationIngestError(f"failed to {action} document: {result}")
+        finally:
+            gff.close()

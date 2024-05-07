@@ -115,9 +115,9 @@ CREATE TABLE IF NOT EXISTS genome_feature_parents (
     FOREIGN KEY (genome_id, parent_id) REFERENCES genome_features
 );
 
--- annotations can also have multiple values, so we don't enforce uniqueness on (genome_id, feature_id, attr_tag)
--- these are 'non-parent' annotations
-CREATE TABLE IF NOT EXISTS genome_feature_annotations (
+-- attributes can also have multiple values, so we don't enforce uniqueness on (genome_id, feature_id, attr_tag)
+-- these are non-Parent, non-ID attributes
+CREATE TABLE IF NOT EXISTS genome_feature_attributes (
     annotation_id SERIAL PRIMARY KEY,
     genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
     feature_id VARCHAR(63) NOT NULL,
@@ -125,5 +125,5 @@ CREATE TABLE IF NOT EXISTS genome_feature_annotations (
     attr_val VARCHAR(63) NOT NULL,
     FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
 );
-CREATE INDEX IF NOT EXISTS annotations_genome_feature_attr_idx
-    ON genome_feature_annotations (genome_id, feature_id, attr_tag);
+CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_idx
+    ON genome_feature_attributes (genome_id, feature_id, attr_tag);

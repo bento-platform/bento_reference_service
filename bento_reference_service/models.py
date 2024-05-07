@@ -88,7 +88,7 @@ class GenomeFeature(BaseModel):
 
     source: str
 
-    entries: list[GenomeFeatureEntry]
-    annotations: dict[str, list[str]]
+    entries: list[GenomeFeatureEntry]  # mutable to allow us to gradually build up entry list during ingestion
+    attributes: dict[str, list[str]]
 
     parents: tuple[str, ...]

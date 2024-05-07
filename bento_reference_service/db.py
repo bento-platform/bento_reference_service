@@ -77,7 +77,15 @@ class Database(PgAsyncDatabase):
             res = await conn.fetch(
                 f"""
                 SELECT
-                    id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri, taxon_id, taxon_label,
+                    id, 
+                    md5_checksum, 
+                    ga4gh_checksum, 
+                    fasta_uri, 
+                    fai_uri, 
+                    gff3_gz_uri, 
+                    gff3_gz_tbi_uri, 
+                    taxon_id, 
+                    taxon_label,
                     array(
                         SELECT json_agg(ga.*) FROM genome_aliases ga WHERE g.id = ga.genome_id
                     ) aliases,
@@ -143,20 +151,20 @@ class Database(PgAsyncDatabase):
                         ga4gh_checksum, 
                         fasta_uri, 
                         fai_uri, 
-                        gff3_uri, 
-                        gff3_tbi_uri, 
+                        gff3_gz_uri, 
+                        gff3_gz_tbi_uri, 
                         taxon_id, 
                         taxon_label
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     """,
                     g.id,
                     g.md5,
                     g.ga4gh,
                     g.fasta,
                     g.fai,
-                    g.gff3,
-                    g.gff3_tbi,
+                    g.gff3_gz,
+                    g.gff3_gz_tbi,
                     g.taxon.id,
                     g.taxon.label,
                 )

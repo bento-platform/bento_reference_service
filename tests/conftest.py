@@ -34,11 +34,13 @@ async def db_cleanup(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             """
+        DROP INDEX genome_features_feature_id_trgm_gin;
         DROP INDEX genome_features_feature_name_trgm_gin;
-        DROP INDEX genome_features_position_text_trgm_gin;
-        DROP INDEX annotations_genome_feature_attr_idx;
+        DROP INDEX genome_feature_entries_position_text_trgm_gin;
+        DROP INDEX genome_feature_attributes_attr_idx;
 
-        DROP TABLE genome_feature_annotations;
+        DROP TABLE genome_feature_entries;
+        DROP TABLE genome_feature_attributes;
         DROP TABLE genome_feature_parents;
         DROP TABLE genome_features;
         

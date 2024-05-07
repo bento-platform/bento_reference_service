@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_entries (
     phase SMALLINT,
     -- Keys:
     FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
-)
+);
 
 CREATE INDEX IF NOT EXISTS genome_feature_entries_position_text_trgm_gin
     ON genome_feature_entries

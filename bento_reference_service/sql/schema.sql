@@ -6,9 +6,17 @@ CREATE TABLE IF NOT EXISTS genomes (
     ga4gh_checksum VARCHAR(63) NOT NULL UNIQUE,  -- GA4GH/VRS/RefGet 2-formatted checksum: SQ.(truncated SHA12, B64)
     fasta_uri TEXT NOT NULL UNIQUE,  -- Can be a local file URI, an S3 URI, a DRS URI, or an HTTPS resource.
     fai_uri TEXT NOT NULL UNIQUE, -- Corresponding .fa.fai for the FASTA. See fasta_uri for what this can be.
+    gff3_gz_uri TEXT UNIQUE,  -- Optional GFF3 annotation URI for the genome.
+    gff3_gz_tbi_uri TEXT UNIQUE,  -- Tabix index for the optional GFF3 annotation file for the genome.
     taxon_id VARCHAR(31) NOT NULL,  -- e.g., NCBITaxon:9606
     taxon_label TEXT NOT NULL  -- e.g., Homo sapiens
 );
+
+-- Migration (v0.2.0): add genomes.gff3_uri and genomes.gff3_tbi_uri if they do not exist:
+ALTER TABLE genomes
+    ADD COLUMN IF NOT EXISTS gff3_gz_uri TEXT UNIQUE,
+    ADD COLUMN IF NOT EXISTS gff3_gz_tbi_uri TEXT UNIQUE;
+-- End migration (v0.2.0)
 
 CREATE TABLE IF NOT EXISTS genome_aliases (
     genome_id VARCHAR(31) NOT NULL REFERENCES genomes ON DELETE CASCADE,

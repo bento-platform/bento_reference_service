@@ -19,10 +19,10 @@ class Database(PgAsyncDatabase):
         super().__init__(config.database_uri, SCHEMA_PATH)
 
     @staticmethod
-    def deserialize_alias(rec: asyncpg.Record) -> Alias:
+    def deserialize_alias(rec: asyncpg.Record | dict) -> Alias:
         return Alias(alias=rec["alias"], naming_authority=rec["naming_authority"])
 
-    def deserialize_contig(self, rec: asyncpg.Record) -> ContigWithRefgetURI:
+    def deserialize_contig(self, rec: asyncpg.Record | dict) -> ContigWithRefgetURI:
         service_base_url = self._config.service_url_base_path.rstrip("/")
         refget_uri_base = f"{service_base_url}/sequence"
         md5 = rec["md5_checksum"]
@@ -57,6 +57,16 @@ class Database(PgAsyncDatabase):
             ga4gh=rec["ga4gh_checksum"],
             fasta=f"{genome_uri}.fa" if external_resource_uris else rec["fasta_uri"],
             fai=f"{genome_uri}.fa.fai" if external_resource_uris else rec["fai_uri"],
+            gff3_gz=(
+                (f"{genome_uri}/features.gff3.gz" if external_resource_uris else rec["gff3_gz_uri"])
+                if rec["gff3_gz_uri"]
+                else None
+            ),
+            gff3_gz_tbi=(
+                (f"{genome_uri}/features.gff3.gz.tbi" if external_resource_uris else rec["gff3_gz_tbi_uri"])
+                if rec["gff3_gz_tbi_uri"]
+                else None
+            ),
             taxon=OntologyTerm(id=rec["taxon_id"], label=rec["taxon_label"]),
         )
 
@@ -126,13 +136,27 @@ class Database(PgAsyncDatabase):
             async with conn.transaction():
                 # Create the genome record:
                 await conn.execute(
-                    "INSERT INTO genomes (id, md5_checksum, ga4gh_checksum, fasta_uri, fai_uri, taxon_id, taxon_label) "
-                    "VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    """
+                    INSERT INTO genomes (
+                        id, 
+                        md5_checksum, 
+                        ga4gh_checksum, 
+                        fasta_uri, 
+                        fai_uri, 
+                        gff3_uri, 
+                        gff3_tbi_uri, 
+                        taxon_id, 
+                        taxon_label
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    """,
                     g.id,
                     g.md5,
                     g.ga4gh,
                     g.fasta,
                     g.fai,
+                    g.gff3,
+                    g.gff3_tbi,
                     g.taxon.id,
                     g.taxon.label,
                 )

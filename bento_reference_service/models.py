@@ -64,6 +64,9 @@ class Genome(BaseModel):
     fasta: str  # URI
     fai: str  # URI
 
+    gff3_gz: str | None = None  # URI
+    gff3_gz_tbi: str | None = None  # URI
+
     # biological information
     taxon: OntologyTerm  # MUST be from NCBITaxon ontology - ingestion SHOULD validate this
     contigs: tuple[Contig, ...]

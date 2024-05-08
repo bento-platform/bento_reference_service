@@ -57,11 +57,6 @@ CREATE TABLE IF NOT EXISTS genome_contig_aliases (
 CREATE TABLE IF NOT EXISTS genome_feature_types (
     type_id VARCHAR(63) NOT NULL PRIMARY KEY  -- Term ID from the Sequence Ontology
 );
-CREATE TABLE IF NOT EXISTS genome_feature_type_synonyms (
-    type_id VARCHAR(63) NOT NULL REFERENCES genome_feature_types,
-    synonym VARCHAR(63) NOT NULL UNIQUE,
-    PRIMARY KEY (type_id, synonym)
-);
 
 DO $$ BEGIN
     CREATE TYPE strand_type AS ENUM ('-', '+', '?', '.');

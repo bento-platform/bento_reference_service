@@ -34,26 +34,26 @@ async def db_cleanup(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             """
-            DROP INDEX genome_features_feature_id_trgm_gin;
-            DROP INDEX genome_features_feature_name_trgm_gin;
-            DROP INDEX genome_feature_entries_position_text_trgm_gin;
-            DROP INDEX genome_feature_attributes_attr_idx;
+            DROP INDEX IF EXISTS genome_features_feature_id_trgm_gin;
+            DROP INDEX IF EXISTS genome_features_feature_name_trgm_gin;
+            DROP INDEX IF EXISTS genome_feature_entries_position_text_trgm_gin;
+            DROP INDEX IF EXISTS genome_feature_attributes_attr_idx;
     
-            DROP TABLE genome_feature_entries;
-            DROP TABLE genome_feature_attributes;
-            DROP TABLE genome_feature_parents;
-            DROP TABLE genome_features;
+            DROP TABLE IF EXISTS genome_feature_entries;
+            DROP TABLE IF EXISTS genome_feature_attributes;
+            DROP TABLE IF EXISTS genome_feature_parents;
+            DROP TABLE IF EXISTS genome_features;
             
-            DROP TABLE genome_feature_type_synonyms;
-            DROP TABLE genome_feature_types;
+            DROP TABLE IF EXISTS genome_feature_type_synonyms;
+            DROP TABLE IF EXISTS genome_feature_types;
             
-            DROP TABLE genome_contig_aliases;
-            DROP TABLE genome_contigs;
+            DROP TABLE IF EXISTS genome_contig_aliases;
+            DROP TABLE IF EXISTS genome_contigs;
             
-            DROP TABLE genome_aliases;
-            DROP TABLE genomes;
+            DROP TABLE IF EXISTS genome_aliases;
+            DROP TABLE IF EXISTS genomes;
     
-            DROP TYPE strand_type;
+            DROP TYPE IF EXISTS strand_type;
             """
         )
     await db.close()

@@ -5,7 +5,14 @@ from fastapi import status
 from fastapi.testclient import TestClient
 from httpx import Response
 
-from .shared_data import SARS_COV_2_GENOME_ID, SARS_COV_2_FASTA_PATH, SARS_COV_2_FAI_PATH, TEST_GENOME_OF_FILE_URIS
+from .shared_data import (
+    SARS_COV_2_GENOME_ID,
+    SARS_COV_2_FASTA_PATH,
+    SARS_COV_2_FAI_PATH,
+    SARS_COV_2_GFF3_GZ_PATH,
+    SARS_COV_2_GFF3_GZ_TBI_PATH,
+    TEST_GENOME_OF_FILE_URIS,
+)
 
 # all tests are async so that db_cleanup (an async fixture) properly works. not sure why it's this way.
 
@@ -102,7 +109,19 @@ async def test_genome_detail_endpoints(test_client: TestClient, aioresponse: aio
     res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}.fa.fai", headers={"Range": "bytes=0-0"})
     assert res.status_code == status.HTTP_206_PARTIAL_CONTENT
     assert res.headers.get("Content-Type") == "text/plain; charset=utf-8"
-    assert res.content == b"N"
+    assert res.content == b"M"
+
+    # - Feature GFF3
+    res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz")
+    assert res.status_code == status.HTTP_200_OK
+    with open(SARS_COV_2_GFF3_GZ_PATH, "rb") as fh:
+        assert res.content == fh.read()
+
+    # - Feature GFF3 TBI
+    res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz.tbi")
+    assert res.status_code == status.HTTP_200_OK
+    with open(SARS_COV_2_GFF3_GZ_TBI_PATH, "rb") as fh:
+        assert res.content == fh.read()
 
 
 async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
@@ -128,3 +147,18 @@ async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses,
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
     res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers={"Authorization": "Token bearer"})
     assert res.status_code == status.HTTP_403_FORBIDDEN
+
+
+async def test_genome_feature_ingest(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+    # setup: create genome  TODO: fixture
+    create_genome_with_permissions(test_client, aioresponse)
+
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+
+    with open(SARS_COV_2_GFF3_GZ_PATH, "rb") as gff3_fh, open(SARS_COV_2_GFF3_GZ_TBI_PATH, "rb") as tbi_fh:
+        res = test_client.put(
+            f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz",
+            files={"gff3_gz": gff3_fh, "gff3_gz_tbi": tbi_fh},
+            headers={"Authorization": "Token bearer"},
+        )
+        assert res.status_code == status.HTTP_204_NO_CONTENT

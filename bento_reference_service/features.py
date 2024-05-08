@@ -105,7 +105,7 @@ async def ingest_gene_feature_annotation(
                     logger.warning(f"Could not find contig with name {contig.name} in GFF3; skipping...")
                     continue
 
-                for i, record in fetch_iter:
+                for i, record in enumerate(fetch_iter):
                     feature_type = record.feature
 
                     if feature_type in GFF_SKIPPED_FEATURE_TYPES:

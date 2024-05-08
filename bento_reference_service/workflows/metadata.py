@@ -7,6 +7,9 @@ __all__ = ["workflow_set"]
 WORKFLOW_FASTA_REFERENCE = "fasta_ref"
 WORKFLOW_GFF3_ANNOTATION = "gff3_annot"
 
+GFF3_PATTERN = r"^.*\.(gff|gff3|gff.gz|gff3.gz)$"
+GFF3_HELP = "GFF3-formatted annotation file for the reference genome."
+
 workflow_set = WorkflowSet(Path(__file__).parent / "wdls")
 
 workflow_set.add_workflow(
@@ -48,12 +51,7 @@ workflow_set.add_workflow(
                 pattern=r"^.*\.(fa|fa.gz|fna|fna.gz|fas|fas.gz|fasta|fasta.gz)$",
                 help="FASTA file for the reference genome, either gzipped or uncompressed.",
             ),
-            wm.WorkflowFileInput(
-                id="genome_gff3",
-                pattern=r"^.*\.(gff|gff3)$",
-                required=False,
-                help="GFF3-formatted annotation file for the reference genome.",
-            ),
+            wm.WorkflowFileInput(id="genome_gff3", pattern=GFF3_PATTERN, required=False, help=GFF3_HELP),
         ],
     ),
 )
@@ -81,11 +79,7 @@ workflow_set.add_workflow(
                 values="{{ serviceUrls.reference }}/genomes?response_format=id_list",
                 help="The reference genome to annotate with the GFF3 file.",
             ),
-            wm.WorkflowFileInput(
-                id="genome_gff3",
-                pattern=r"^.*\.(gff|gff3|gff.gz|gff3.gz)$",
-                help="GFF3-formatted annotation file for the reference genome.",
-            ),
+            wm.WorkflowFileInput(id="genome_gff3", pattern=GFF3_PATTERN, help=GFF3_HELP),
         ],
     ),
 )

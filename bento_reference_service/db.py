@@ -352,8 +352,53 @@ class Database(PgAsyncDatabase):
         return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}
 
     async def bulk_ingest_genome_features(self, features: Iterable[GenomeFeature]):
-        # TODO
-        pass
+        entries: list[tuple[str, str, int, int, str, float | None, int | None]] = []
+        attributes: list[tuple[str, str, str, str]] = []
+        parents: list[tuple[str, str, str]] = []
+        feature_tuples: list[tuple[str, str, str, str, str, str, str]] = []
+
+        for feature in features:
+            genome_id = feature.genome_id
+            contig_name = feature.contig_name
+            feature_id = feature.feature_id
+
+            entries.extend(
+                (
+                    genome_id,
+                    feature_id,
+                    e.start_pos,
+                    e.end_pos,
+                    f"{contig_name}:{e.start_pos}-{e.end_pos}",
+                    e.score,
+                    e.phase,
+                )
+                for e in feature.entries
+            )
+
+            for attr_tag, attr_vals in feature.attributes.items():
+                attributes.extend((genome_id, feature_id, attr_tag, attr_val) for attr_val in attr_vals)
+
+            parents.extend((genome_id, feature_id, p) for p in feature.parents)
+
+            feature_tuples.append(
+                (
+                    genome_id,
+                    contig_name,
+                    feature.strand,
+                    feature_id,
+                    feature.feature_name,
+                    feature.feature_type,
+                    feature.source,
+                )
+            )
+
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            async with conn.transaction():
+                await conn.copy_records_to_table("genome_features", records=feature_tuples)
+                await conn.copy_records_to_table("genome_feature_attributes", records=attributes)
+                await conn.copy_records_to_table("genome_feature_entries", records=entries)
+                await conn.copy_records_to_table("genome_feature_parents", records=parents)
 
 
 @lru_cache()

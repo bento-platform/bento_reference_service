@@ -30,6 +30,24 @@ def parse_attributes(raw_attributes: dict[str, str]) -> dict[str, list[str]]:
     return {k: [url_unquote(e) for e in str(v).split(",") if e] for k, v in raw_attributes.items()}
 
 
+def extract_feature_id(record, attributes: dict[str, list[str]]) -> str | None:
+    feature_type = record.feature.lower()
+    feature_id = attributes.get("ID", (None,))[0]
+
+    if feature_id:
+        return feature_id
+
+    match feature_type:
+        case "gene":
+            return attributes.get("gene_id", (None,))[0]
+        case "transcript":
+            return attributes.get("transcript_id", (None,))[0]
+        case "exon":
+            return attributes.get("exon_id", (None,))[0]
+        case _:  # no alternative ID attribute to use, so we couldn't figure anything out.
+            return None
+
+
 def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None:
     feature_type = record.feature.lower()
     feature_name: str | None = attributes.get("Name", (None,))[0]
@@ -101,8 +119,8 @@ async def ingest_gene_feature_annotation(
 
                 try:
                     fetch_iter = gff.fetch(contig.name, parser=pysam.asGFF3())
-                except ValueError:
-                    logger.warning(f"Could not find contig with name {contig.name} in GFF3; skipping...")
+                except ValueError as e:
+                    logger.warning(f"Could not find contig with name {contig.name} in GFF3; skipping... ({e})")
                     continue
 
                 for i, record in enumerate(fetch_iter):
@@ -116,7 +134,7 @@ async def ingest_gene_feature_annotation(
 
                     try:
                         record_attributes = parse_attributes(feature_raw_attributes)
-                        feature_id = record_attributes.get("ID", (None,))[0]
+                        feature_id = extract_feature_id(record, record_attributes)
                         feature_name = extract_feature_name(record, record_attributes)
 
                         if feature_id is None:
@@ -142,7 +160,7 @@ async def ingest_gene_feature_annotation(
                             features_by_id[feature_id] = m.GenomeFeature(
                                 genome_id=genome_id,
                                 contig_name=contig.name,
-                                strand=record.strand,
+                                strand=record.strand or ".",  # None/"." <=> unstranded
                                 feature_id=feature_id,
                                 feature_name=feature_name,
                                 feature_type=feature_type,
@@ -176,5 +194,13 @@ async def ingest_gene_feature_annotation(
 
     features_to_ingest = _iter_features()
 
+    n_ingested: int = 0
+
     while data := tuple(itertools.islice(features_to_ingest, GFF_BATCH_SIZE)):  # take features in batches
         await db.bulk_ingest_genome_features(data)
+        n_ingested += len(data)
+
+    if n_ingested == 0:
+        raise AnnotationIngestError("No gene features could be ingested - is this a valid GFF3 file?")
+
+    logger.info(f"Ingested {n_ingested} gene features")

@@ -241,10 +241,14 @@ async def genomes_detail_features_ingest_gff3(
             while data := (await gff3_gz.read(config.file_response_chunk_size)):
                 await fh.write(data)
 
+        logger.debug(f"Wrote GFF.gz data to {fn}; size={fn.stat().st_size}")
+
         # copy .gff3.gz.tbi to temporary directory for ingestion
         async with aiofiles.open(fn_tbi, "wb") as fh:
             while data := (await gff3_gz_tbi.read(config.file_response_chunk_size)):
                 await fh.write(data)
+
+        logger.debug(f"Wrote GFF.gz.tbi data to {fn_tbi}; size={fn_tbi.stat().st_size}")
 
         # clear existing gene features for this genome
         await db.clear_genome_features(genome_id)

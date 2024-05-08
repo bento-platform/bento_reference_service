@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_attributes (
     genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
     feature_id VARCHAR(63) NOT NULL,
     attr_tag VARCHAR(63) NOT NULL,
-    attr_val VARCHAR(63) NOT NULL,
+    attr_val TEXT NOT NULL,
     FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
 );
 CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_idx

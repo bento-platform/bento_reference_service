@@ -34,11 +34,11 @@ workflow fasta_ref {
             validate_ssl = validate_ssl
     }
 
-    if (genome_gff3) {
+    if (defined(genome_gff3)) {
         call normalize_and_compress_gff3_and_index as gi {
             input:
                 genome_id = genome_id,
-                gff3 = genome_gff3
+                gff3 = select_first([genome_gff3])  # Coerce File? into File via select_first
         }
 
         call ingest_into_drs as drs_gff3 {
@@ -71,12 +71,12 @@ workflow fasta_ref {
             validate_ssl = validate_ssl
     }
 
-    if (genome_gff3) {
+    if (defined(genome_gff3)) {
         call ingest_gff3_into_ref {
             input:
                 genome_id = genome_id,
-                gff3_gz = gi.sorted_gff3_gz,
-                gff3_gz_tbi = gi.sorted_gff3_gz_tbi,
+                gff3_gz = select_first([gi.sorted_gff3_gz]),  # Coerce File? into File via select_first
+                gff3_gz_tbi = select_first([gi.sorted_gff3_gz_tbi]),  # "
                 reference_url = reference_url,
                 token = access_token,
                 validate_ssl = validate_ssl

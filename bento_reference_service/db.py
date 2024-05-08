@@ -406,8 +406,9 @@ class Database(PgAsyncDatabase):
         conn: asyncpg.Connection
         async with self.connect() as conn:
             async with conn.transaction():
-                await conn.executemany("INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING",
-                                       feature_types)
+                await conn.executemany(
+                    "INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING", feature_types
+                )
 
                 await conn.copy_records_to_table(
                     "genome_features",

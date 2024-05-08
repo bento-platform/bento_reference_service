@@ -257,9 +257,8 @@ async def genomes_detail_features_ingest_gff3(
         await ingest_gene_feature_annotation(genome_id, fn, fn_tbi, db, logger)
 
     finally:
-        pass
-        # fn.unlink(missing_ok=True)
-        # fn_tbi.unlink(missing_ok=True)
+        fn.unlink(missing_ok=True)
+        fn_tbi.unlink(missing_ok=True)
 
 
 @genome_router.get("/{genome_id}/features.gff3.gz.tbi", dependencies=[authz_middleware.dep_public_endpoint()])

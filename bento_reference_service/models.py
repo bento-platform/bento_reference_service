@@ -80,7 +80,7 @@ class GenomeFeature(BaseModel):
     genome_id: str
     contig_name: str
 
-    strand: Literal["negative", "positive", "unknown", "not_stranded"]
+    strand: Literal["-", "+", "?", "."]
 
     feature_id: str
     feature_name: str

@@ -150,7 +150,9 @@ async def ingest_gene_feature_annotation(
                                 entries=[entry],
                                 attributes={
                                     # skip attributes which have been captured in the above information
-                                    k: v for k, v in record_attributes.items() if k not in GFF_CAPTURED_ATTRIBUTES
+                                    k: v
+                                    for k, v in record_attributes.items()
+                                    if k not in GFF_CAPTURED_ATTRIBUTES
                                 },
                                 parents=tuple(p for p in record_attributes.get("Parent", ()) if p),
                             )

@@ -360,6 +360,7 @@ class Database(PgAsyncDatabase):
             await conn.execute("DELETE FROM genome_features WHERE genome_id = $1", g_id)
 
     async def bulk_ingest_genome_features(self, features: Iterable[GenomeFeature]):
+        feature_types: list[tuple[str]] = []
         entries: list[tuple[str, str, int, int, str, float | None, int | None]] = []
         attributes: list[tuple[str, str, str, str]] = []
         parents: list[tuple[str, str, str]] = []
@@ -369,6 +370,8 @@ class Database(PgAsyncDatabase):
             genome_id = feature.genome_id
             contig_name = feature.contig_name
             feature_id = feature.feature_id
+
+            feature_types.append((feature.feature_type,))
 
             entries.extend(
                 (
@@ -403,10 +406,54 @@ class Database(PgAsyncDatabase):
         conn: asyncpg.Connection
         async with self.connect() as conn:
             async with conn.transaction():
-                await conn.copy_records_to_table("genome_features", records=feature_tuples)
-                await conn.copy_records_to_table("genome_feature_attributes", records=attributes)
-                await conn.copy_records_to_table("genome_feature_entries", records=entries)
-                await conn.copy_records_to_table("genome_feature_parents", records=parents)
+                await conn.executemany("INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING",
+                                       feature_types)
+
+                await conn.copy_records_to_table(
+                    "genome_features",
+                    columns=[
+                        "genome_id",
+                        "contig_name",
+                        "strand",
+                        "feature_id",
+                        "feature_name",
+                        "feature_type",
+                        "source",
+                    ],
+                    records=feature_tuples,
+                )
+                await conn.copy_records_to_table(
+                    "genome_feature_attributes",
+                    columns=[
+                        "genome_id",
+                        "feature_id",
+                        "attr_tag",
+                        "attr_val",
+                    ],
+                    records=attributes,
+                )
+                await conn.copy_records_to_table(
+                    "genome_feature_entries",
+                    columns=[
+                        "genome_id",
+                        "feature_id",
+                        "start_pos",
+                        "end_pos",
+                        "position_text",
+                        "score",
+                        "phase",
+                    ],
+                    records=entries,
+                )
+                await conn.copy_records_to_table(
+                    "genome_feature_parents",
+                    columns=[
+                        "genome_id",
+                        "feature_id",
+                        "parent_id",
+                    ],
+                    records=parents,
+                )
 
 
 @lru_cache()

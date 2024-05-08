@@ -21,6 +21,9 @@ __all__ = [
 ]
 
 
+ACCEPT_BYTE_RANGES = {"Accept-Ranges": "bytes"}
+
+
 class StreamingRangeNotSatisfiable(Exception):
     def __init__(self, message: str, n_bytes: int | None):
         self._n_bytes: int | None = n_bytes
@@ -223,13 +226,18 @@ async def generate_uri_streaming_response(
     range_header: str | None,
     media_type: str,
     impose_response_limit: bool,
+    support_byte_ranges: bool = False,
     extra_response_headers: dict[str, str] | None = None,
 ):
     try:
         content_length, stream = await stream_from_uri(config, logger, uri, range_header, impose_response_limit)
         return StreamingResponse(
             stream,
-            headers={**(extra_response_headers or {}), "Content-Length": str(content_length)},
+            headers={
+                **(extra_response_headers or {}),
+                **(ACCEPT_BYTE_RANGES if support_byte_ranges else {}),
+                "Content-Length": str(content_length),
+            },
             media_type=media_type,
             status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
         )

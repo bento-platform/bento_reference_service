@@ -48,6 +48,10 @@ app.exception_handler(StarletteHTTPException)(
 app.exception_handler(RequestValidationError)(validation_exception_handler_factory(authz_middleware))
 
 
+# Create the required ingestion temporary directory if needed
+config_for_setup.file_ingest_tmp_dir.mkdir(exist_ok=True)
+
+
 @app.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
 async def service_info(config: ConfigDependency, logger: LoggerDependency):
     return await build_service_info_from_pydantic_config(

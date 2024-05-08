@@ -351,6 +351,14 @@ class Database(PgAsyncDatabase):
 
         return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}
 
+    async def clear_genome_features(self, g_id: str):
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            await conn.execute("DELETE FROM genome_feature_attributes WHERE genome_id = $1", g_id)
+            await conn.execute("DELETE FROM genome_feature_entries WHERE genome_id = $1", g_id)
+            await conn.execute("DELETE FROM genome_feature_parents WHERE genome_id = $1", g_id)
+            await conn.execute("DELETE FROM genome_features WHERE genome_id = $1", g_id)
+
     async def bulk_ingest_genome_features(self, features: Iterable[GenomeFeature]):
         entries: list[tuple[str, str, int, int, str, float | None, int | None]] = []
         attributes: list[tuple[str, str, str, str]] = []

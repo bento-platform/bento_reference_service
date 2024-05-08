@@ -246,6 +246,9 @@ async def genomes_detail_features_ingest_gff3(
             while data := (await gff3_gz_tbi.read(config.file_response_chunk_size)):
                 await fh.write(data)
 
+        # clear existing gene features for this genome
+        await db.clear_genome_features(genome_id)
+
         # ingest gene features into the database
         await ingest_gene_feature_annotation(genome_id, fn, fn_tbi, db, logger)
 

@@ -83,7 +83,7 @@ workflow_set.add_workflow(
             ),
             wm.WorkflowFileInput(
                 id="genome_gff3",
-                pattern=r"^.*\.(gff|gff3)$",
+                pattern=r"^.*\.(gff|gff3|gff.gz|gff3.gz)$",
                 help="GFF3-formatted annotation file for the reference genome.",
             ),
         ],

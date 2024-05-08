@@ -34,6 +34,30 @@ workflow fasta_ref {
             validate_ssl = validate_ssl
     }
 
+    if (genome_gff3) {
+        call normalize_and_compress_gff3_and_index as gi {
+            input:
+                genome_id = genome_id,
+                gff3 = genome_gff3
+        }
+
+        call ingest_into_drs as drs_gff3 {
+            input:
+                file = gi.sorted_gff3_gz,
+                drs_url = drs_url,
+                access_token = access_token,
+                validate_ssl = validate_ssl
+        }
+
+        call ingest_into_drs as drs_gff3_tbi {
+            input:
+                file = gi.sorted_gff3_gz_tbi,
+                drs_url = drs_url,
+                access_token = access_token,
+                validate_ssl = validate_ssl
+        }
+    }
+
     call ingest_metadata_into_ref {
         input:
             genome_id = genome_id,
@@ -45,6 +69,18 @@ workflow fasta_ref {
             reference_url = reference_url,
             token = access_token,
             validate_ssl = validate_ssl
+    }
+
+    if (genome_gff3) {
+        call ingest_gff3_into_ref {
+            input:
+                genome_id = genome_id,
+                gff3_gz = gi.sorted_gff3_gz,
+                gff3_gz_tbi = gi.sorted_gff3_gz_tbi,
+                reference_url = reference_url,
+                token = access_token,
+                validate_ssl = validate_ssl
+        }
     }
 }
 
@@ -70,6 +106,7 @@ task uncompress_fasta_and_generate_fai_if_needed {
     }
 }
 
+# TODO: shared file with this task
 task ingest_into_drs {
     input {
         File file
@@ -104,6 +141,34 @@ task ingest_into_drs {
     }
 }
 
+# TODO: shared file with this task
+task normalize_and_compress_gff3_and_index {
+    input {
+        String genome_id
+        File gff3
+    }
+
+    command <<<
+        if [[ '~{gff3}' == *.gz ]]; then
+            zcat '~{gff3}' > unsorted.gff3
+        else
+            cp '~{gff3}' unsorted.gff3
+        fi
+
+        out_file='~{genome_id}_annotation.gff3.gz'
+
+        # See http://www.htslib.org/doc/tabix.html#EXAMPLE
+        #  - sort the GFF3 file
+        (grep ^"#" sorted.gff3; grep -v ^"#" sorted.gff3 | sort -k1,1 -k4,4n) | bgzip -@ 2 > "${out_file}"
+        tabix -@ 2 "${out_file}"
+    >>>
+
+    output {
+        File sorted_gff3_gz = "${genome_id}_annotation.gff3.gz"
+        File sorted_gff3_gz_tbi = "${genome_id}_annotation.gff3.gz.tbi"
+    }
+}
+
 task ingest_metadata_into_ref {
     input {
         String genome_id
@@ -112,6 +177,8 @@ task ingest_metadata_into_ref {
         File fai
         String fasta_drs_uri
         String fai_drs_uri
+        String? gff3_gz_drs_uri
+        String? gff3_gz_tbi_drs_uri
         String reference_url
         String token
         Boolean validate_ssl
@@ -119,7 +186,13 @@ task ingest_metadata_into_ref {
 
     command <<<
         fasta-checksum-utils '~{fasta}' --fai '~{fai}' --genome-id '~{genome_id}' --out-format bento-json | \
-          jq '.fasta = "~{fasta_drs_uri}" | .fai = "~{fai_drs_uri}" | .taxon = ~{taxon_term_json}' > metadata.json
+            jq '.fasta = "~{fasta_drs_uri}" | .fai = "~{fai_drs_uri}" | .taxon = ~{taxon_term_json}' > metadata.json
+
+        if [[ '~{gff3_gz_drs_uri}' != '' ]]; then  # assume if this is set then both gff3 variables are set.
+            cat metadata.json | \
+                jq '.gff3_gz = "~{gff3_gz_drs_uri}" | .gff_gz_tbi = "~{gff3_gz_tbi_drs_uri}"' > metadata.json.tmp
+            mv metadata.json.tmp metadata.json
+        fi
 
         rm '~{fasta}' '~{fai}'
 
@@ -130,6 +203,32 @@ task ingest_metadata_into_ref {
             --data "@metadata.json" \
             --fail-with-body \
             "~{reference_url}/genomes"
+    >>>
+
+    output {
+        File out = stdout()
+        File err = stderr()
+    }
+}
+
+task ingest_gff3_into_ref {
+    input {
+        String genome_id
+        File gff3_gz
+        File gff3_gz_tbi
+        String reference_url
+        String token
+        Boolean validate_ssl
+    }
+
+    command <<<
+        curl ~{true="" false="-k" validate_ssl} \
+            -X PUT \
+            -F "gff3_gz=@~{gff3_gz}" \
+            -F "gff3_gz_tbi=@~{gff3_gz_tbi}" \
+            -H "Authorization: Bearer ~{token}" \
+            --fail-with-body \
+            "~{reference_url}/genomes/~{genome_id}/features.gff3.gz"
     >>>
 
     output {

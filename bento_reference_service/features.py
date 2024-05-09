@@ -2,6 +2,7 @@ import logging
 import pysam
 import traceback
 
+from datetime import datetime
 from pathlib import Path
 from typing import Generator
 from urllib.parse import unquote as url_unquote
@@ -200,10 +201,13 @@ async def ingest_gene_feature_annotation(
     #  - we use contigs as batches rather than a fixed batch size so that we are guaranteed to get parents alongside
     #    their child features in the same batch.
     while data := next(features_to_ingest, ()):
+        s = datetime.now()
+        logger.debug(f"ingest_gene_feature_annotation: ingesting batch of {len(data)} features")
         await db.bulk_ingest_genome_features(data, logger)
         n_ingested += len(data)
+        logger.debug(f"ingest_gene_feature_annotation: batch took {(datetime.now() - s).total_seconds():.1f} seconds")
 
     if n_ingested == 0:
         raise AnnotationIngestError("No gene features could be ingested - is this a valid GFF3 file?")
 
-    logger.info(f"Ingested {n_ingested} gene features")
+    logger.info(f"ingest_gene_feature_annotation: ingested {n_ingested} gene features")

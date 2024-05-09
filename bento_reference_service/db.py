@@ -237,9 +237,9 @@ class Database(PgAsyncDatabase):
             feature_name=rec["feature_name"],
             feature_type=rec["feature_type"],
             source=rec["source"],
-            entries=tuple(map(Database.deserialize_genome_feature_entry, json.loads(rec["entries"]))),
-            annotations=json.loads(rec["annotations"]),  # TODO
-            parents=tuple(rec["parents"]),  # tuple of parent IDs
+            entries=tuple(map(Database.deserialize_genome_feature_entry, json.loads(rec["entries"] or "[]"))),
+            attributes=json.loads(rec["attributes"] or "{}"),
+            parents=tuple(rec["parents"] or ()),  # tuple of parent IDs
         )
 
     @staticmethod
@@ -257,8 +257,6 @@ class Database(PgAsyncDatabase):
         self,
         g_id: str,
         f_ids: list[str],
-        offset: int = 0,
-        limit: int = 10,
         existing_conn: asyncpg.Connection | None = None,
     ):
         final_query = f"""
@@ -274,19 +272,26 @@ class Database(PgAsyncDatabase):
             (
                 SELECT array_agg(gfp.parent_id) FROM genome_feature_parents gfp 
                 WHERE gfp.genome_id = gf.genome_id AND gfp.feature_id = gf.feature_id
-            ) parents
+            ) parents,
+            (
+                WITH attrs_tmp AS (
+                    SELECT attr_tag, array_agg(gfa.attr_val) attr_vals FROM genome_feature_attributes gfa
+                    WHERE gfa.genome_id = gf.genome_id AND gfa.feature_id = gf.feature_id
+                    GROUP BY gfa.attr_tag
+                )
+                SELECT jsonb_object_agg(attrs_tmp.attr_tag, attrs_tmp.attr_vals) FROM attrs_tmp
+            ) attributes
         FROM genome_features gf
         WHERE gf.genome_id = $1 AND feature_id = any($2::text[])
-        OFFSET $3 LIMIT $4
         """
 
         conn: asyncpg.Connection
         async with self.connect(existing_conn) as conn:
-            final_res = await conn.fetch(final_query, g_id, f_ids, offset, limit)
+            final_res = await conn.fetch(final_query, g_id, f_ids)
             return [self.deserialize_genome_feature(r) for r in final_res]
 
     async def get_genome_feature_by_id(self, g_id: str, f_id: str) -> GenomeFeature | None:
-        res = await self.get_genome_features_by_ids(g_id, [f_id], 0, 1)
+        res = await self.get_genome_features_by_ids(g_id, [f_id])
         return res[0] if res else None
 
     async def query_genome_features(
@@ -307,7 +312,7 @@ class Database(PgAsyncDatabase):
 
         def _q_param(pv: str | int) -> str:
             q_params.append(pv)
-            return f"${len(gf_where_items) + 2}"
+            return f"${len(q_params) + 1}"
 
         if q:
             param = _q_param(q)
@@ -339,15 +344,16 @@ class Database(PgAsyncDatabase):
         FROM genome_features gf 
         WHERE 
             gf.genome_id = $1
-            AND jsonb_array_length(gf.entries) > 0
-            AND {where_clause};
+            AND {where_clause}
+        OFFSET {_q_param(max(offset, 0))} 
+        LIMIT  {_q_param(max(limit, 0))}
         """
 
         conn: asyncpg.Connection
         async with self.connect() as conn:
             id_res = await conn.fetch(id_query, g_id, *q_params)
             final_list = await self.get_genome_features_by_ids(
-                g_id, [r["feature_id"] for r in id_res], offset, limit, conn
+                g_id, [r["feature_id"] for r in id_res], conn
             )
 
         return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}

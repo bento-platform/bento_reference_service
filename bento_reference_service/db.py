@@ -276,7 +276,7 @@ class Database(PgAsyncDatabase):
                 WHERE gfp.genome_id = gf.genome_id AND gfp.feature_id = gf.feature_id
             ) parents
         FROM genome_features gf
-        WHERE gf.genome_id = $1 AND feature_id IN $2
+        WHERE gf.genome_id = $1 AND feature_id = any($2::text[])
         OFFSET $3 LIMIT $4
         """
 

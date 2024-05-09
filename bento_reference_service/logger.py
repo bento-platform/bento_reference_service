@@ -12,6 +12,8 @@ __all__ = [
     "LoggerDependency",
 ]
 
+logging.basicConfig(level=logging.NOTSET)
+
 
 @lru_cache
 def get_logger(config: ConfigDependency) -> logging.Logger:

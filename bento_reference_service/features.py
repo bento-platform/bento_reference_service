@@ -105,6 +105,8 @@ async def ingest_gene_feature_annotation(
     if genome is None:
         raise AnnotationIngestError(f"Genome with ID {genome_id} not found")
 
+    logger.info(f"Ingesting gene features for genome {genome_id}...")
+
     def _iter_features() -> Generator[tuple[m.GenomeFeature, ...], None, None]:
         gff = pysam.TabixFile(str(gff_path), index=str(gff_index_path))
         total_processed: int = 0
@@ -198,7 +200,7 @@ async def ingest_gene_feature_annotation(
     #  - we use contigs as batches rather than a fixed batch size so that we are guaranteed to get parents alongside
     #    their child features in the same batch.
     while data := next(features_to_ingest, ()):
-        await db.bulk_ingest_genome_features(data)
+        await db.bulk_ingest_genome_features(data, logger)
         n_ingested += len(data)
 
     if n_ingested == 0:

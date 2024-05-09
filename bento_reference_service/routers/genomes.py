@@ -251,6 +251,7 @@ async def genomes_detail_features_ingest_gff3(
         logger.debug(f"Wrote GFF.gz.tbi data to {fn_tbi}; size={fn_tbi.stat().st_size}")
 
         # clear existing gene features for this genome
+        logger.info(f"Clearing gene features for genome {genome_id} in preparation for feature (re-)ingestion...")
         await db.clear_genome_features(genome_id)
 
         # ingest gene features into the database

@@ -1,4 +1,3 @@
-import itertools
 import logging
 import pysam
 import traceback
@@ -17,7 +16,6 @@ __all__ = [
 
 GFF_CAPTURED_ATTRIBUTES = frozenset({"ID", "Parent"})
 GFF_SKIPPED_FEATURE_TYPES = frozenset({"stop_codon_redefined_as_selenocysteine"})
-GFF_BATCH_SIZE = 5000
 GFF_LOG_PROGRESS_INTERVAL = 1000
 
 
@@ -107,7 +105,7 @@ async def ingest_gene_feature_annotation(
     if genome is None:
         raise AnnotationIngestError(f"Genome with ID {genome_id} not found")
 
-    def _iter_features() -> Generator[m.GenomeFeature, None, None]:
+    def _iter_features() -> Generator[tuple[m.GenomeFeature, ...], None, None]:
         gff = pysam.TabixFile(str(gff_path), index=str(gff_index_path))
         total_processed: int = 0
 
@@ -186,7 +184,7 @@ async def ingest_gene_feature_annotation(
                     if total_processed % GFF_LOG_PROGRESS_INTERVAL == 0:
                         logger.info(f"Processed {total_processed} features")
 
-                yield from features_by_id.values()
+                yield tuple(features_by_id.values())
                 features_by_id.clear()
 
         finally:
@@ -196,7 +194,10 @@ async def ingest_gene_feature_annotation(
 
     n_ingested: int = 0
 
-    while data := tuple(itertools.islice(features_to_ingest, GFF_BATCH_SIZE)):  # take features in batches
+    # take features in contig batches
+    #  - we use contigs as batches rather than a fixed batch size so that we are guaranteed to get parents alongside
+    #    their child features in the same batch.
+    while data := next(features_to_ingest, ()):
         await db.bulk_ingest_genome_features(data)
         n_ingested += len(data)
 

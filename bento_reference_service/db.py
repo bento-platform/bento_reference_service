@@ -119,8 +119,8 @@ class Database(PgAsyncDatabase):
                 *((g_id,) if g_id is not None else ()),
             )
 
-            for r in map(lambda g: self.deserialize_genome(g, external_resource_uris), res):
-                yield r
+        for r in map(lambda g: self.deserialize_genome(g, external_resource_uris), res):
+            yield r
 
     async def get_genomes(self, external_resource_uris: bool = False) -> tuple[GenomeWithURIs, ...]:
         return tuple([r async for r in self._select_genomes(None, external_resource_uris)])
@@ -143,12 +143,13 @@ class Database(PgAsyncDatabase):
             contig_res = await conn.fetchrow(
                 "SELECT * FROM genome_contigs WHERE md5_checksum = $1 OR ga4gh_checksum = $1", chk_norm
             )
-            genome_res = (
-                (await anext(self._select_genomes(contig_res["genome_id"], False), None)) if contig_res else None
-            )
-            if genome_res is None or contig_res is None:
-                return None
-            return genome_res, self.deserialize_contig(contig_res)
+
+        genome_res = (
+            (await anext(self._select_genomes(contig_res["genome_id"], False), None)) if contig_res else None
+        )
+        if genome_res is None or contig_res is None:
+            return None
+        return genome_res, self.deserialize_contig(contig_res)
 
     async def create_genome(self, g: Genome, return_external_resource_uris: bool) -> GenomeWithURIs | None:
         conn: asyncpg.Connection
@@ -302,7 +303,7 @@ class Database(PgAsyncDatabase):
         conn: asyncpg.Connection
         async with self.connect(existing_conn) as conn:
             final_res = await conn.fetch(final_query, g_id, f_ids)
-            return [self.deserialize_genome_feature(r) for r in final_res]
+        return [self.deserialize_genome_feature(r) for r in final_res]
 
     async def get_genome_feature_by_id(self, g_id: str, f_id: str) -> GenomeFeature | None:
         res = await self.get_genome_features_by_ids(g_id, [f_id])

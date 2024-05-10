@@ -153,12 +153,36 @@ async def test_genome_feature_ingest(test_client: TestClient, aioresponse: aiore
     # setup: create genome  TODO: fixture
     create_genome_with_permissions(test_client, aioresponse)
 
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    hs = {"Authorization": "Token bearer"}
+
+    # Test we can create a task for ingesting features
+
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
 
     with open(SARS_COV_2_GFF3_GZ_PATH, "rb") as gff3_fh, open(SARS_COV_2_GFF3_GZ_TBI_PATH, "rb") as tbi_fh:
         res = test_client.put(
             f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz",
             files={"gff3_gz": gff3_fh, "gff3_gz_tbi": tbi_fh},
-            headers={"Authorization": "Token bearer"},
+            headers=hs,
         )
-        assert res.status_code == status.HTTP_204_NO_CONTENT
+
+    assert res.status_code == status.HTTP_202_ACCEPTED
+    data = res.json()
+    assert "task" in data
+    task_id = data["task"].split("/")[-1]
+
+    # Test we can access the task and that it eventually succeeds
+
+    finished: bool = False
+    task_status: str = ""
+    task_msg: str = ""
+    while not finished:
+        res = test_client.get(f"/tasks/{task_id}", headers=hs)
+        assert res.status_code == status.HTTP_200_OK
+        rd = res.json()
+        task_status = rd["status"]
+        task_msg = rd["message"]
+        finished = task_status in {"success", "error"}
+
+    assert task_status == "success"
+    assert task_msg == "ingested 49 features"

@@ -2,9 +2,9 @@ import aiofiles
 import asyncpg
 import traceback
 
-from bento_lib.auth.permissions import P_INGEST_REFERENCE_MATERIAL, P_DELETE_REFERENCE_MATERIAL
+from bento_lib.auth.permissions import P_DELETE_REFERENCE_MATERIAL
 from bento_lib.auth.resources import RESOURCE_EVERYTHING
-from fastapi import APIRouter, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from typing import Annotated
 from uuid import uuid4
@@ -13,17 +13,14 @@ from .. import models as m
 from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..db import Database, DatabaseDependency
-from ..features import AnnotationGenomeNotFoundError, ingest_gene_feature_annotation
+from ..features import INGEST_FEATURES_TASK_KIND, ingest_features_task
 from ..logger import LoggerDependency
 from ..streaming import generate_uri_streaming_response
+from .constants import DEPENDENCY_INGEST_REFERENCE_MATERIAL
 
 
 __all__ = ["genome_router"]
 
-
-DEPENDENCY_INGEST_REFERENCE_MATERIAL = authz_middleware.dep_require_permissions_on_resource(
-    frozenset({P_INGEST_REFERENCE_MATERIAL}), RESOURCE_EVERYTHING
-)
 
 genome_router = APIRouter(prefix="/genomes")
 
@@ -226,9 +223,10 @@ async def genomes_detail_features_gff3(
 @genome_router.put(
     "/{genome_id}/features.gff3.gz",
     dependencies=[DEPENDENCY_INGEST_REFERENCE_MATERIAL],
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def genomes_detail_features_ingest_gff3(
+    background_tasks: BackgroundTasks,
     config: ConfigDependency,
     db: DatabaseDependency,
     logger: LoggerDependency,
@@ -236,37 +234,29 @@ async def genomes_detail_features_ingest_gff3(
     gff3_gz: UploadFile,
     gff3_gz_tbi: UploadFile,
 ):
+    # Verify that genome exists
+    await get_genome_or_raise_404(db, genome_id=genome_id, external_resource_uris=False)
+
     fn = config.file_ingest_tmp_dir / f"{uuid4()}.gff3.gz"
     fn_tbi = config.file_ingest_tmp_dir / f"{fn}.tbi"
 
-    try:
-        # copy .gff3.gz to temporary directory for ingestion
-        async with aiofiles.open(fn, "wb") as fh:
-            while data := (await gff3_gz.read(config.file_response_chunk_size)):
-                await fh.write(data)
+    # copy .gff3.gz to temporary directory for ingestion
+    async with aiofiles.open(fn, "wb") as fh:
+        while data := (await gff3_gz.read(config.file_response_chunk_size)):
+            await fh.write(data)
 
-        logger.debug(f"Wrote GFF.gz data to {fn}; size={fn.stat().st_size}")
+    logger.debug(f"Wrote GFF.gz data to {fn}; size={fn.stat().st_size}")
 
-        # copy .gff3.gz.tbi to temporary directory for ingestion
-        async with aiofiles.open(fn_tbi, "wb") as fh:
-            while data := (await gff3_gz_tbi.read(config.file_response_chunk_size)):
-                await fh.write(data)
+    # copy .gff3.gz.tbi to temporary directory for ingestion
+    async with aiofiles.open(fn_tbi, "wb") as fh:
+        while data := (await gff3_gz_tbi.read(config.file_response_chunk_size)):
+            await fh.write(data)
 
-        logger.debug(f"Wrote GFF.gz.tbi data to {fn_tbi}; size={fn_tbi.stat().st_size}")
+    logger.debug(f"Wrote GFF.gz.tbi data to {fn_tbi}; size={fn_tbi.stat().st_size}")
 
-        # clear existing gene features for this genome
-        logger.info(f"Clearing gene features for genome {genome_id} in preparation for feature (re-)ingestion...")
-        await db.clear_genome_features(genome_id)
-
-        # ingest gene features into the database
-        await ingest_gene_feature_annotation(genome_id, fn, fn_tbi, db, logger)
-
-    except AnnotationGenomeNotFoundError:
-        raise exc_genome_not_found(genome_id)
-
-    finally:
-        fn.unlink(missing_ok=True)
-        fn_tbi.unlink(missing_ok=True)
+    task_id = await db.create_task(genome_id, INGEST_FEATURES_TASK_KIND)
+    background_tasks.add_task(ingest_features_task, genome_id, fn, fn_tbi, task_id, db, logger)
+    return {"task": f"{config.service_url_base_path}/tasks/{task_id}"}
 
 
 @genome_router.get("/{genome_id}/features.gff3.gz.tbi", dependencies=[authz_middleware.dep_public_endpoint()])

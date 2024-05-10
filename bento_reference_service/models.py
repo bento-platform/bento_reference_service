@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 from typing import Literal
 
@@ -10,7 +11,7 @@ __all__ = [
     "GenomeWithURIs",
     "GenomeFeatureEntry",
     "GenomeFeature",
-    "GenomeFeatureWithInternalID",
+    "Task",
 ]
 
 # Pydantic/dict models, not database models
@@ -90,10 +91,17 @@ class GenomeFeature(BaseModel):
     source: str
 
     entries: list[GenomeFeatureEntry]  # mutable to allow us to gradually build up entry list during ingestion
+
+    gene_id: str | None  # extracted from attributes, since for GENCODE GFF3s this is a standardized and useful field
     attributes: dict[str, list[str]]
 
     parents: tuple[str, ...]
 
 
-class GenomeFeatureWithInternalID(GenomeFeature):
+class Task(BaseModel):
     id: int
+    genome_id: str
+    kind: Literal["ingest_features"]
+    status: Literal["active", "success", "error"]
+    message: str
+    created: datetime

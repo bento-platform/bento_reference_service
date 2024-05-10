@@ -11,12 +11,18 @@ from . import models as m
 from .db import Database
 
 __all__ = [
+    "INGEST_FEATURES_TASK_KIND",
     "AnnotationGenomeNotFoundError",
-    "ingest_gene_feature_annotation",
+    "ingest_features",
+    "ingest_features_task",
 ]
 
+INGEST_FEATURES_TASK_KIND = "ingest_features"
 
-GFF_CAPTURED_ATTRIBUTES = frozenset({"ID", "Parent"})
+GFF_ID_ATTR = "ID"
+GFF_PARENT_ATTR = "ID"
+GFF_GENCODE_GENE_ID_ATTR = "gene_id"
+GFF_CAPTURED_ATTRIBUTES = frozenset({GFF_ID_ATTR, GFF_PARENT_ATTR, GFF_GENCODE_GENE_ID_ATTR})
 GFF_SKIPPED_FEATURE_TYPES = frozenset({"stop_codon_redefined_as_selenocysteine"})
 GFF_LOG_PROGRESS_INTERVAL = 1000
 
@@ -36,14 +42,14 @@ def parse_attributes(raw_attributes: dict[str, str]) -> dict[str, list[str]]:
 
 def extract_feature_id(record, attributes: dict[str, list[str]]) -> str | None:
     feature_type = record.feature.lower()
-    feature_id = attributes.get("ID", (None,))[0]
+    feature_id = attributes.get(GFF_ID_ATTR, (None,))[0]
 
     if feature_id:
         return feature_id
 
     match feature_type:
         case "gene":
-            return attributes.get("gene_id", (None,))[0]
+            return attributes.get(GFF_GENCODE_GENE_ID_ATTR, (None,))[0]
         case "transcript":
             return attributes.get("transcript_id", (None,))[0]
         case "exon":
@@ -63,7 +69,7 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
 
     match feature_type:
         case "gene":
-            return attributes.get("gene_name", attributes.get("gene_id", (None,)))[0]
+            return attributes.get("gene_name", attributes.get(GFF_GENCODE_GENE_ID_ATTR, (None,)))[0]
         case "transcript":
             return transcript_name
         case "5utr" | "five_prime_utr":  # 5' untranslated region (UTR)
@@ -85,7 +91,7 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
             return None
 
 
-async def ingest_gene_feature_annotation(
+async def ingest_features(
     # parameters:
     genome_id: str,
     gff_path: Path,
@@ -93,7 +99,7 @@ async def ingest_gene_feature_annotation(
     # dependencies:
     db: Database,
     logger: logging.Logger,
-) -> None:
+) -> int:
     """
     Given a genome ID and a path to an external GTF gene/exon/transcript annotation file, this function copies the GTF
     into the relevant .bentoGenome directory and ingests the annotations into an ElasticSearch index for fuzzy text
@@ -113,14 +119,12 @@ async def ingest_gene_feature_annotation(
 
     logger.info(f"Ingesting gene features for genome {genome_id}...")
 
-    def _iter_features() -> Generator[tuple[m.GenomeFeatureWithInternalID, ...], None, None]:
+    def _iter_features() -> Generator[tuple[m.GenomeFeature, ...], None, None]:
         gff = pysam.TabixFile(str(gff_path), index=str(gff_index_path))
         total_processed: int = 0
 
-        current_feature_row_id: int = 1  # We generate a numeric ID for features to save space and improve lookup time.
-
         try:
-            features_by_id: dict[str, m.GenomeFeatureWithInternalID] = {}
+            features_by_id: dict[str, m.GenomeFeature] = {}
 
             for contig in genome.contigs:
                 logger.info(f"Indexing features from contig {contig.name}")
@@ -165,8 +169,14 @@ async def ingest_gene_feature_annotation(
                         if feature_id in features_by_id:
                             features_by_id[feature_id].entries.append(entry)
                         else:
-                            features_by_id[feature_id] = m.GenomeFeatureWithInternalID(
-                                id=current_feature_row_id,
+                            attributes: dict[str, list[str]] = {
+                                # skip attributes which have been captured in the above information:
+                                k: vs
+                                for k, vs in record_attributes.items()
+                                if k not in GFF_CAPTURED_ATTRIBUTES
+                            }
+
+                            features_by_id[feature_id] = m.GenomeFeature(
                                 genome_id=genome_id,
                                 contig_name=contig.name,
                                 strand=record.strand or ".",  # None/"." <=> unstranded
@@ -175,15 +185,10 @@ async def ingest_gene_feature_annotation(
                                 feature_type=feature_type,
                                 source=record.source,
                                 entries=[entry],
-                                attributes={
-                                    # skip attributes which have been captured in the above information
-                                    k: v
-                                    for k, v in record_attributes.items()
-                                    if k not in GFF_CAPTURED_ATTRIBUTES
-                                },
-                                parents=tuple(p for p in record_attributes.get("Parent", ()) if p),
+                                gene_id=record_attributes.get(GFF_GENCODE_GENE_ID_ATTR, (None,))[0],
+                                attributes=attributes,
+                                parents=tuple(p for p in record_attributes.get(GFF_PARENT_ATTR, ()) if p),
                             )
-                            current_feature_row_id += 1
 
                     except Exception as e:
                         logger.error(
@@ -220,3 +225,32 @@ async def ingest_gene_feature_annotation(
         raise AnnotationIngestError("No gene features could be ingested - is this a valid GFF3 file?")
 
     logger.info(f"ingest_gene_feature_annotation: ingested {n_ingested} gene features")
+
+    return n_ingested
+
+
+async def ingest_features_task(
+    genome_id: str, gff3_gz_path: Path, gff3_gz_tbi_path: Path, task_id: int, db: Database, logger: logging.Logger
+):
+    await db.update_task_status(task_id, "running")
+
+    # clear existing gene features for this genome
+    logger.info(f"Clearing gene features for genome {genome_id} in preparation for feature (re-)ingestion...")
+    await db.clear_genome_features(genome_id)
+
+    try:
+        # ingest gene features into the database
+        n_ingested = await ingest_features(genome_id, gff3_gz_path, gff3_gz_tbi_path, db, logger)
+        await db.update_task_status(task_id, "success", message=f"ingested {n_ingested} features")
+
+    except Exception as e:
+        err = (
+            f"task {task_id}: encountered exception while ingesting features: {e}; traceback: {traceback.format_exc()}"
+        )
+        logger.error(err)
+        await db.update_task_status(task_id, "error", message=err)
+
+    finally:
+        # unlink temporary files
+        gff3_gz_path.unlink(missing_ok=True)
+        gff3_gz_tbi_path.unlink(missing_ok=True)

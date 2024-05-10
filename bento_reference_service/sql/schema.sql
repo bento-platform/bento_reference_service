@@ -80,9 +80,11 @@ CREATE TABLE IF NOT EXISTS genome_features (
     feature_name TEXT NOT NULL,
     feature_type VARCHAR(15) NOT NULL REFERENCES genome_feature_types,
     source TEXT NOT NULL,
+    -- extracted from attributes (especially GENCODE GFF3s) - gene context (NULL if not in a gene and not a gene):
+    gene_id INTEGER REFERENCES genome_features ON DELETE CASCADE,
     -- Keys:
     UNIQUE (genome_id, feature_id),
-    FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs
+    FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS genome_features_genome_idx ON genome_features (genome_id);
 CREATE INDEX IF NOT EXISTS genome_features_feature_id_trgm_gin ON genome_features USING GIN (feature_id gin_trgm_ops);
@@ -115,13 +117,45 @@ CREATE TABLE IF NOT EXISTS genome_feature_parents (
 CREATE INDEX IF NOT EXISTS genome_feature_parents_feature_idx ON genome_feature_parents (feature);
 CREATE INDEX IF NOT EXISTS genome_feature_parents_parent_idx ON genome_feature_parents (parent);
 
--- attributes can also have multiple values, so we don't enforce uniqueness on (genome_id, feature_id, attr_tag)
--- these are non-Parent, non-ID attributes
+-- attributes can also have multiple values, so we don't enforce uniqueness on (feature, attr_tag)
+--  - these are non-Parent, non-ID attributes.
+--  - since we have a lot of repetition, we can normalize both keys and values into their own deduplicated tables and do
+--    this set-processing at ingestion time.
+
+CREATE TABLE IF NOT EXISTS genome_feature_attribute_keys (
+    id INTEGER NOT NULL PRIMARY KEY,  -- attribute-key surrogate key
+    attr_key VARCHAR(63) NOT NULL  -- attribute-key text value
+);
+CREATE INDEX IF NOT EXISTS genome_feature_attribute_keys_attr_idx
+    ON genome_feature_attribute_keys (attr_key);
+
+CREATE TABLE IF NOT EXISTS genome_feature_attribute_values (
+    id INTEGER NOT NULL PRIMARY KEY,  -- attribute-value surrogate key
+    attr_val TEXT NOT NULL  -- attribute value
+);
+
 CREATE TABLE IF NOT EXISTS genome_feature_attributes (
     id SERIAL PRIMARY KEY,
     feature INTEGER NOT NULL REFERENCES genome_features ON DELETE CASCADE,
-    attr_tag VARCHAR(63) NOT NULL,
-    attr_val TEXT NOT NULL
+    attr_key INTEGER NOT NULL REFERENCES genome_feature_attribute_keys,
+    attr_val INTEGER NOT NULL REFERENCES genome_feature_attribute_values
 );
 CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_idx
-    ON genome_feature_attributes (feature, attr_tag);
+    ON genome_feature_attributes (feature, attr_key);
+
+
+DO $$ BEGIN
+    CREATE TYPE task_kind AS ENUM ('ingest_features');
+    CREATE TYPE task_status AS ENUM ('queued', 'running', 'success', 'error');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id SERIAL PRIMARY KEY,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
+    kind task_kind NOT NULL,
+    status task_status NOT NULL DEFAULT 'queued'::task_status,
+    message TEXT NOT NULL DEFAULT '',
+    created TIMESTAMP DEFAULT (now() AT TIME ZONE 'utc')
+);

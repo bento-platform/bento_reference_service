@@ -15,11 +15,13 @@ os.environ["BENTO_AUTHZ_SERVICE_URL"] = "https://authz.local"
 
 from bento_reference_service.config import get_config
 from bento_reference_service.db import Database, get_db
+from bento_reference_service.logger import get_logger
 from bento_reference_service.main import app
 
 
 async def get_test_db() -> AsyncGenerator[Database, None]:
-    db_instance = Database(get_config())
+    config = get_config()
+    db_instance = Database(config, get_logger(config))
     await db_instance.initialize(pool_size=1)  # Small pool size for testing
     yield db_instance
 
@@ -34,13 +36,22 @@ async def db_cleanup(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             """
+            DROP TABLE IF EXISTS tasks;
+            DROP TYPE IF EXISTS task_kind;
+            DROP TYPE IF EXISTS task_status;
+            
             DROP INDEX IF EXISTS genome_features_feature_id_trgm_gin;
             DROP INDEX IF EXISTS genome_features_feature_name_trgm_gin;
             DROP INDEX IF EXISTS genome_feature_entries_position_text_trgm_gin;
             DROP INDEX IF EXISTS genome_feature_attributes_attr_idx;
-    
+            DROP INDEX IF EXISTS genome_feature_attribute_keys_attr_idx;
+            DROP INDEX IF EXISTS genome_feature_parents_feature_idx;
+            DROP INDEX IF EXISTS genome_feature_parents_parent_idx;
+            
             DROP TABLE IF EXISTS genome_feature_entries;
             DROP TABLE IF EXISTS genome_feature_attributes;
+            DROP TABLE IF EXISTS genome_feature_attribute_keys;
+            DROP TABLE IF EXISTS genome_feature_attribute_values;
             DROP TABLE IF EXISTS genome_feature_parents;
             DROP TABLE IF EXISTS genome_features;
             

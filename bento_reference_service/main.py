@@ -15,6 +15,7 @@ from .constants import BENTO_SERVICE_KIND, SERVICE_TYPE
 from .logger import get_logger, LoggerDependency
 from .routers.genomes import genome_router
 from .routers.refget import refget_router
+from .routers.tasks import task_router
 from .routers.workflows import workflow_router
 
 
@@ -22,9 +23,11 @@ app = FastAPI()
 
 # Attach different routers to the app, for:
 # - genome listing
+# - asynchronous task querying
 # - our RefGet API implementation
 # - our workflow metadata and WDLs
 app.include_router(genome_router)
+app.include_router(task_router)
 app.include_router(refget_router)
 app.include_router(workflow_router)
 

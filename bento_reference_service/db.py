@@ -5,7 +5,7 @@ from bento_lib.db.pg_async import PgAsyncDatabase
 from fastapi import Depends
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, AsyncIterator, Iterable
+from typing import Annotated, AsyncIterator, Literal
 
 from .config import Config, ConfigDependency
 from .logger import LoggerDependency
@@ -17,7 +17,7 @@ from .models import (
     OntologyTerm,
     GenomeFeatureEntry,
     GenomeFeature,
-    GenomeFeatureWithInternalID,
+    Task,
 )
 
 
@@ -144,9 +144,7 @@ class Database(PgAsyncDatabase):
                 "SELECT * FROM genome_contigs WHERE md5_checksum = $1 OR ga4gh_checksum = $1", chk_norm
             )
 
-        genome_res = (
-            (await anext(self._select_genomes(contig_res["genome_id"], False), None)) if contig_res else None
-        )
+        genome_res = (await anext(self._select_genomes(contig_res["genome_id"], False), None)) if contig_res else None
         if genome_res is None or contig_res is None:
             return None
         return genome_res, self.deserialize_contig(contig_res)
@@ -290,9 +288,12 @@ class Database(PgAsyncDatabase):
             ) parents,
             (
                 WITH attrs_tmp AS (
-                    SELECT attr_tag, array_agg(gfa.attr_val) attr_vals FROM genome_feature_attributes gfa
+                    SELECT gfak.attr_key AS attr_key, array_agg(gfav.attr_val) attr_vals 
+                    FROM genome_feature_attributes gfa 
+                        JOIN genome_feature_attribute_keys gfak ON gfa.attr_key = gfak.id
+                        JOIN genome_feature_attribute_values gfav ON gfa.attr_val = gfav.id
                     WHERE gfa.feature = gf.id
-                    GROUP BY gfa.attr_tag
+                    GROUP BY gfak.attr_key
                 )
                 SELECT jsonb_object_agg(attrs_tmp.attr_tag, attrs_tmp.attr_vals) FROM attrs_tmp
             ) attributes
@@ -376,56 +377,104 @@ class Database(PgAsyncDatabase):
         async with self.connect() as conn:
             await conn.execute("DELETE FROM genome_features WHERE genome_id = $1", g_id)
 
-    async def bulk_ingest_genome_features(self, features: tuple[GenomeFeatureWithInternalID, ...]):
-        feature_types: set[tuple[str]] = set()
-        entries: list[tuple[int, int, int, str, float | None, int | None]] = []
-        attributes: list[tuple[int, str, str]] = []
-        parents: list[tuple[int, int]] = []
-        feature_tuples: list[tuple[int, str, str, str, str, str, str, str]] = []
-
-        parent_row_ids_by_nat_id = {p.feature_id: p.id for p in features}
-
-        for feature in features:
-            row_id = feature.id
-            genome_id = feature.genome_id
-            contig_name = feature.contig_name
-            feature_id = feature.feature_id
-
-            feature_types.add((feature.feature_type,))
-
-            entries.extend(
-                (
-                    row_id,
-                    e.start_pos,
-                    e.end_pos,
-                    f"{contig_name}:{e.start_pos}-{e.end_pos}",
-                    e.score,
-                    e.phase,
-                )
-                for e in feature.entries
-            )
-
-            for attr_tag, attr_vals in feature.attributes.items():
-                attributes.extend((row_id, attr_tag, attr_val) for attr_val in attr_vals)
-
-            parents.extend((row_id, parent_row_ids_by_nat_id[p]) for p in feature.parents)
-
-            feature_tuples.append(
-                (
-                    row_id,
-                    genome_id,
-                    contig_name,
-                    feature.strand,
-                    feature_id,
-                    feature.feature_name,
-                    feature.feature_type,
-                    feature.source,
-                )
-            )
+    async def bulk_ingest_genome_features(self, features: tuple[GenomeFeature, ...]):
+        # Manually generate sequential IDs
+        # This requires an exclusive write lock on the database, so we don't get conflicting IDs
 
         conn: asyncpg.Connection
         async with self.connect() as conn:
             async with conn.transaction():
+                fr = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_features")
+                kr = await conn.fetchrow(
+                    "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_keys"
+                )
+                vr = await conn.fetchrow(
+                    "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_values"
+                )
+
+                assert fr
+                assert kr
+                assert vr
+
+                # We generate a numeric ID for features to save space and improve lookup time.;
+                current_feature_row_id: int = fr["next_id"]
+                current_attr_key_id: int = kr["next_id"]
+                current_attr_value_id: int = vr["next_id"]
+
+                feature_row_ids: dict[str, int] = {}
+                attr_key_ids: dict[str, int] = {}
+                attr_value_ids: dict[str, int] = {}
+
+                # ------------------------------------------------------------------------------------------------------
+
+                feature_types: set[tuple[str]] = set()
+                entries: list[tuple[int, int, int, str, float | None, int | None]] = []
+                attributes: list[tuple[int, int, int]] = []
+                parents: list[tuple[int, int]] = []
+                feature_tuples: list[tuple[int, str, str, str, str, str, str, str, str | None]] = []
+
+                for f in features:  # iter 1: populate row ID lookup dict
+                    feature_row_ids[f.feature_id] = current_feature_row_id
+                    current_feature_row_id += 1
+
+                for feature in features:
+                    feature_id = feature.feature_id
+
+                    row_id = feature_row_ids[feature_id]
+                    genome_id = feature.genome_id
+                    contig_name = feature.contig_name
+
+                    feature_types.add((feature.feature_type,))
+
+                    entries.extend(
+                        (
+                            row_id,
+                            e.start_pos,
+                            e.end_pos,
+                            f"{contig_name}:{e.start_pos}-{e.end_pos}",
+                            e.score,
+                            e.phase,
+                        )
+                        for e in feature.entries
+                    )
+
+                    # to reduce attribute storage, we deduplicate storage of keys and values by giving them integer IDs,
+                    # and put these in the attributes table. we also have to put the key/value lookups into their
+                    # respective tables.
+                    for attr_key, attr_vals in feature.attributes.items():
+                        if attr_key in attr_key_ids:
+                            ak = attr_key_ids[attr_key]
+                        else:
+                            ak = current_attr_key_id
+                            attr_key_ids[attr_key] = current_attr_key_id
+                            current_attr_key_id += 1
+
+                        for attr_val in attr_vals:
+                            if attr_val in attr_value_ids:
+                                av = attr_value_ids[attr_val]
+                            else:
+                                av = current_attr_value_id
+                                attr_value_ids[attr_val] = current_attr_value_id
+                                current_attr_value_id += 1
+
+                            attributes.append((row_id, ak, av))
+
+                    parents.extend((row_id, feature_row_ids[p]) for p in feature.parents)
+
+                    feature_tuples.append(
+                        (
+                            row_id,
+                            genome_id,
+                            contig_name,
+                            feature.strand,
+                            feature_id,
+                            feature.feature_name,
+                            feature.feature_type,
+                            feature.source,
+                            feature_row_ids.get(feature.gene_id) if feature.gene_id else None,
+                        )
+                    )
+
                 self.logger.debug(f"bulk_ingest_genome_features: have {len(feature_types)} feature types for batch")
                 await conn.executemany(
                     "INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING", feature_types
@@ -443,8 +492,25 @@ class Database(PgAsyncDatabase):
                         "feature_name",
                         "feature_type",
                         "source",
+                        "gene_id",
                     ],
                     records=feature_tuples,
+                )
+
+                attribute_keys: list[tuple[int, str]] = [(ik, sk) for sk, ik in attr_key_ids.items()]
+                self.logger.debug(
+                    f"bulk_ingest_genome_features: have {len(attribute_keys)} feature attribute keys for batch"
+                )
+                await conn.copy_records_to_table(
+                    "genome_feature_attribute_keys", columns=["id", "attr_key"], records=attribute_keys
+                )
+
+                attribute_values: list[tuple[int, str]] = [(iv, sv) for sv, iv in attr_value_ids.items()]
+                self.logger.debug(
+                    f"bulk_ingest_genome_features: have {len(attribute_keys)} feature attribute values for batch"
+                )
+                await conn.copy_records_to_table(
+                    "genome_feature_attribute_values", columns=["id", "attr_val"], records=attribute_values
                 )
 
                 self.logger.debug(
@@ -454,7 +520,7 @@ class Database(PgAsyncDatabase):
                     "genome_feature_attributes",
                     columns=[
                         "feature",
-                        "attr_tag",
+                        "attr_key",
                         "attr_val",
                     ],
                     records=attributes,
@@ -483,6 +549,62 @@ class Database(PgAsyncDatabase):
                     ],
                     records=parents,
                 )
+
+    @staticmethod
+    def deserialize_task(rec: asyncpg.Record | dict) -> Task:
+        return Task(
+            id=rec["id"],
+            genome_id=rec["genome_id"],
+            kind=rec["kind"],
+            status=rec["status"],
+            message=rec["message"],
+            created=rec["created"],
+        )
+
+    async def get_task(self, t_id: int) -> Task | None:
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            res = await conn.fetchrow("SELECT * FROM tasks WHERE id = $1", t_id)
+        return self.deserialize_task(res) if res is not None else None
+
+    async def query_tasks(self, g_id: str | None, task_kind: Literal["ingest_features"] | None) -> tuple[Task, ...]:
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            where_clauses: list[str] = []
+            params: list[int | str] = []
+
+            if g_id is not None:
+                where_clauses.append(f"genome_id = ${len(where_clauses) + 1}")
+                params.append(g_id)
+
+            if task_kind is not None:
+                where_clauses.append(f"kind = ${len(where_clauses) + 1}::task_kind")
+                params.append(task_kind)
+
+            where_part = " AND ".join(where_clauses) if where_clauses else "true"
+
+            res = await conn.fetch(f"SELECT * FROM tasks WHERE genome_id = $1 {where_part}", *params)
+        return tuple(self.deserialize_task(r) for r in res)
+
+    async def update_task_status(
+        self, t_id: int, status: Literal["queued", "running", "success", "error"], message: str = ""
+    ):
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            await conn.execute(
+                "UPDATE tasks SET status = $2::task_status, message = $3 WHERE id = $1", t_id, status, message
+            )
+
+    async def create_task(self, g_id: str, task_kind: Literal["ingest_features"]) -> int:
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            res = await conn.fetchrow(
+                "INSERT INTO tasks (genome_id, kind) VALUES ($1, $2::task_kind) RETURNING id",
+                g_id,
+                task_kind,
+            )
+        assert res is not None
+        return res["id"]
 
 
 @lru_cache()

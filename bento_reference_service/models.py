@@ -10,6 +10,7 @@ __all__ = [
     "GenomeWithURIs",
     "GenomeFeatureEntry",
     "GenomeFeature",
+    "GenomeFeatureWithInternalID",
 ]
 
 # Pydantic/dict models, not database models
@@ -92,3 +93,7 @@ class GenomeFeature(BaseModel):
     attributes: dict[str, list[str]]
 
     parents: tuple[str, ...]
+
+
+class GenomeFeatureWithInternalID(GenomeFeature):
+    id: int

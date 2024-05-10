@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS genome_aliases (
     naming_authority VARCHAR(63) NOT NULL,
     PRIMARY KEY (genome_id, alias)
 );
+CREATE INDEX IF NOT EXISTS genome_aliases_genome_idx ON genome_aliases (genome_id);
 
 CREATE TABLE IF NOT EXISTS genome_contigs (
     genome_id VARCHAR(31) NOT NULL REFERENCES genomes ON DELETE CASCADE,
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS genome_contigs (
     UNIQUE (genome_id, md5_checksum),
     UNIQUE (genome_id, ga4gh_checksum)
 );
+CREATE INDEX IF NOT EXISTS genome_contigs_genome_idx ON genome_contigs (genome_id);
 CREATE INDEX IF NOT EXISTS genome_contigs_md5_checksum_idx ON genome_contigs (md5_checksum);
 CREATE INDEX IF NOT EXISTS genome_contigs_ga4gh_checksum_idx ON genome_contigs (ga4gh_checksum);
 
@@ -65,7 +67,9 @@ EXCEPTION
 END $$;
 
 CREATE TABLE IF NOT EXISTS genome_features (
-    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
+    -- Don't use SERIAL, since we need to keep track of these during ingest for bulk ingestion:
+    id INTEGER NOT NULL PRIMARY KEY,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes ON DELETE CASCADE,
     -- Feature location information, on the genome:
     contig_name VARCHAR(63) NOT NULL,
     strand strand_type NOT NULL,
@@ -77,24 +81,26 @@ CREATE TABLE IF NOT EXISTS genome_features (
     feature_type VARCHAR(15) NOT NULL REFERENCES genome_feature_types,
     source TEXT NOT NULL,
     -- Keys:
-    PRIMARY KEY (genome_id, feature_id),
+    UNIQUE (genome_id, feature_id),
     FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs
 );
+CREATE INDEX IF NOT EXISTS genome_features_genome_idx ON genome_features (genome_id);
 CREATE INDEX IF NOT EXISTS genome_features_feature_id_trgm_gin ON genome_features USING GIN (feature_id gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin ON genome_features USING GIN (feature_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin
+    ON genome_features USING GIN (feature_name gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS genome_feature_entries (
-    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
-    feature_id VARCHAR(63) NOT NULL,
+    id SERIAL PRIMARY KEY,
+    feature INTEGER NOT NULL REFERENCES genome_features ON DELETE CASCADE,
     start_pos INTEGER NOT NULL, -- 1-based, inclusive
     end_pos INTEGER NOT NULL, -- 1-based, exclusive - if start_pos == end_pos then it's a 0-length feature
     position_text TEXT NOT NULL,  -- chr:start-end style searchable string - cached for indexing purposes
     score FLOAT,
-    phase SMALLINT,
-    -- Keys:
-    FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
+    phase SMALLINT
 );
-CREATE INDEX IF NOT EXISTS genome_feature_entries_genome_feature_idx ON genome_feature_entries (genome_id, feature_id);
+CREATE INDEX IF NOT EXISTS genome_feature_entries_feature_idx ON genome_feature_entries (feature);
+CREATE INDEX IF NOT EXISTS genome_feature_entries_start_end_pos_idx ON genome_feature_entries (start_pos, end_pos);
+CREATE INDEX IF NOT EXISTS genome_feature_entries_end_pos_idx ON genome_feature_entries (end_pos);
 CREATE INDEX IF NOT EXISTS genome_feature_entries_position_text_trgm_gin
     ON genome_feature_entries
     USING GIN (position_text gin_trgm_ops);
@@ -102,25 +108,20 @@ CREATE INDEX IF NOT EXISTS genome_feature_entries_position_text_trgm_gin
 -- in GFF3 files, features can have one or multiple parents within the same annotation file
 --  - facilitate this via a many-to-many table
 CREATE TABLE IF NOT EXISTS genome_feature_parents (
-    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
-    feature_id VARCHAR(63) NOT NULL,
-    parent_id VARCHAR(63) NOT NULL,
-    FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features,
-    FOREIGN KEY (genome_id, parent_id) REFERENCES genome_features
+    feature INTEGER NOT NULL REFERENCES genome_features ON DELETE CASCADE,
+    parent INTEGER NOT NULL REFERENCES genome_features ON DELETE CASCADE,
+    PRIMARY KEY (feature, parent)
 );
-CREATE INDEX IF NOT EXISTS genome_feature_parents_genome_feature_idx ON genome_feature_parents (genome_id, feature_id);
+CREATE INDEX IF NOT EXISTS genome_feature_parents_feature_idx ON genome_feature_parents (feature);
+CREATE INDEX IF NOT EXISTS genome_feature_parents_parent_idx ON genome_feature_parents (parent);
 
 -- attributes can also have multiple values, so we don't enforce uniqueness on (genome_id, feature_id, attr_tag)
 -- these are non-Parent, non-ID attributes
 CREATE TABLE IF NOT EXISTS genome_feature_attributes (
-    annotation_id SERIAL PRIMARY KEY,
-    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
-    feature_id VARCHAR(63) NOT NULL,
+    id SERIAL PRIMARY KEY,
+    feature INTEGER NOT NULL REFERENCES genome_features ON DELETE CASCADE,
     attr_tag VARCHAR(63) NOT NULL,
-    attr_val TEXT NOT NULL,
-    FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
+    attr_val TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS genome_feature_attributes_genome_feature_idx
-    ON genome_feature_parents (genome_id, feature_id);
 CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_idx
-    ON genome_feature_attributes (genome_id, feature_id, attr_tag);
+    ON genome_feature_attributes (feature, attr_tag);

@@ -113,12 +113,14 @@ async def ingest_gene_feature_annotation(
 
     logger.info(f"Ingesting gene features for genome {genome_id}...")
 
-    def _iter_features() -> Generator[tuple[m.GenomeFeature, ...], None, None]:
+    def _iter_features() -> Generator[tuple[m.GenomeFeatureWithInternalID, ...], None, None]:
         gff = pysam.TabixFile(str(gff_path), index=str(gff_index_path))
         total_processed: int = 0
 
+        current_feature_row_id: int = 1  # We generate a numeric ID for features to save space and improve lookup time.
+
         try:
-            features_by_id: dict[str, m.GenomeFeature] = {}
+            features_by_id: dict[str, m.GenomeFeatureWithInternalID] = {}
 
             for contig in genome.contigs:
                 logger.info(f"Indexing features from contig {contig.name}")
@@ -163,7 +165,8 @@ async def ingest_gene_feature_annotation(
                         if feature_id in features_by_id:
                             features_by_id[feature_id].entries.append(entry)
                         else:
-                            features_by_id[feature_id] = m.GenomeFeature(
+                            features_by_id[feature_id] = m.GenomeFeatureWithInternalID(
+                                id=current_feature_row_id,
                                 genome_id=genome_id,
                                 contig_name=contig.name,
                                 strand=record.strand or ".",  # None/"." <=> unstranded
@@ -180,6 +183,7 @@ async def ingest_gene_feature_annotation(
                                 },
                                 parents=tuple(p for p in record_attributes.get("Parent", ()) if p),
                             )
+                            current_feature_row_id += 1
 
                     except Exception as e:
                         logger.error(
@@ -208,7 +212,7 @@ async def ingest_gene_feature_annotation(
     while data := next(features_to_ingest, ()):
         s = datetime.now()
         logger.debug(f"ingest_gene_feature_annotation: ingesting batch of {len(data)} features")
-        await db.bulk_ingest_genome_features(data, logger)
+        await db.bulk_ingest_genome_features(data)
         n_ingested += len(data)
         logger.debug(f"ingest_gene_feature_annotation: batch took {(datetime.now() - s).total_seconds():.1f} seconds")
 

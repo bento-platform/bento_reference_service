@@ -8,15 +8,26 @@ from pathlib import Path
 from typing import Annotated, AsyncIterator, Iterable
 
 from .config import Config, ConfigDependency
-from .models import Alias, ContigWithRefgetURI, Genome, GenomeWithURIs, OntologyTerm, GenomeFeatureEntry, GenomeFeature
+from .logger import LoggerDependency
+from .models import (
+    Alias,
+    ContigWithRefgetURI,
+    Genome,
+    GenomeWithURIs,
+    OntologyTerm,
+    GenomeFeatureEntry,
+    GenomeFeature,
+    GenomeFeatureWithInternalID,
+)
 
 
 SCHEMA_PATH = Path(__file__).parent / "sql" / "schema.sql"
 
 
 class Database(PgAsyncDatabase):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, logger: logging.Logger):
         self._config: Config = config
+        self.logger: logging.Logger = logger
         super().__init__(config.database_uri, SCHEMA_PATH)
 
     @staticmethod
@@ -201,6 +212,8 @@ class Database(PgAsyncDatabase):
                         contig_alias_tuples,
                     )
 
+        self.logger.debug(f"Created genome: {g}")
+
         return await self.get_genome(g.id, external_resource_uris=return_external_resource_uris)
 
     async def genome_feature_types_summary(self, g_id: str):
@@ -248,7 +261,7 @@ class Database(PgAsyncDatabase):
         return f"""
         WITH entries_tmp AS (
             SELECT start_pos, end_pos, score, phase FROM genome_feature_entries gfe
-            WHERE gfe.genome_id = gf.genome_id AND gfe.feature_id = gf.feature_id {where_clause}
+            WHERE gfe.feature = gf.id {where_clause}
         ) 
         SELECT jsonb_agg(entries_tmp.*) FROM entries_tmp
         """
@@ -270,13 +283,14 @@ class Database(PgAsyncDatabase):
             source,
             ({self._feature_inner_entries_query()}) entries,
             (
-                SELECT array_agg(gfp.parent_id) FROM genome_feature_parents gfp 
-                WHERE gfp.genome_id = gf.genome_id AND gfp.feature_id = gf.feature_id
+                SELECT array_agg(gffp.feature_id) 
+                    FROM genome_feature_parents gfp JOIN genome_features gffp ON gfp.parent = gffp.id
+                WHERE gfp.feature = gf.id
             ) parents,
             (
                 WITH attrs_tmp AS (
                     SELECT attr_tag, array_agg(gfa.attr_val) attr_vals FROM genome_feature_attributes gfa
-                    WHERE gfa.genome_id = gf.genome_id AND gfa.feature_id = gf.feature_id
+                    WHERE gfa.feature = gf.id
                     GROUP BY gfa.attr_tag
                 )
                 SELECT jsonb_object_agg(attrs_tmp.attr_tag, attrs_tmp.attr_vals) FROM attrs_tmp
@@ -349,41 +363,40 @@ class Database(PgAsyncDatabase):
         LIMIT  {_q_param(max(limit, 0))}
         """
 
+        from datetime import datetime
+
         conn: asyncpg.Connection
         async with self.connect() as conn:
             id_res = await conn.fetch(id_query, g_id, *q_params)
-            final_list = await self.get_genome_features_by_ids(
-                g_id, [r["feature_id"] for r in id_res], conn
-            )
+            final_list = await self.get_genome_features_by_ids(g_id, [r["feature_id"] for r in id_res], conn)
 
         return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}
 
     async def clear_genome_features(self, g_id: str):
         conn: asyncpg.Connection
         async with self.connect() as conn:
-            await conn.execute("DELETE FROM genome_feature_attributes WHERE genome_id = $1", g_id)
-            await conn.execute("DELETE FROM genome_feature_entries WHERE genome_id = $1", g_id)
-            await conn.execute("DELETE FROM genome_feature_parents WHERE genome_id = $1", g_id)
             await conn.execute("DELETE FROM genome_features WHERE genome_id = $1", g_id)
 
-    async def bulk_ingest_genome_features(self, features: Iterable[GenomeFeature], logger: logging.Logger):
-        feature_types: list[tuple[str]] = []
-        entries: list[tuple[str, str, int, int, str, float | None, int | None]] = []
-        attributes: list[tuple[str, str, str, str]] = []
-        parents: list[tuple[str, str, str]] = []
-        feature_tuples: list[tuple[str, str, str, str, str, str, str]] = []
+    async def bulk_ingest_genome_features(self, features: tuple[GenomeFeatureWithInternalID, ...]):
+        feature_types: set[tuple[str]] = set()
+        entries: list[tuple[int, int, int, str, float | None, int | None]] = []
+        attributes: list[tuple[int, str, str]] = []
+        parents: list[tuple[int, int]] = []
+        feature_tuples: list[tuple[int, str, str, str, str, str, str, str]] = []
+
+        parent_row_ids_by_nat_id = {p.feature_id: p.id for p in features}
 
         for feature in features:
+            row_id = feature.id
             genome_id = feature.genome_id
             contig_name = feature.contig_name
             feature_id = feature.feature_id
 
-            feature_types.append((feature.feature_type,))
+            feature_types.add((feature.feature_type,))
 
             entries.extend(
                 (
-                    genome_id,
-                    feature_id,
+                    row_id,
                     e.start_pos,
                     e.end_pos,
                     f"{contig_name}:{e.start_pos}-{e.end_pos}",
@@ -394,12 +407,13 @@ class Database(PgAsyncDatabase):
             )
 
             for attr_tag, attr_vals in feature.attributes.items():
-                attributes.extend((genome_id, feature_id, attr_tag, attr_val) for attr_val in attr_vals)
+                attributes.extend((row_id, attr_tag, attr_val) for attr_val in attr_vals)
 
-            parents.extend((genome_id, feature_id, p) for p in feature.parents)
+            parents.extend((row_id, parent_row_ids_by_nat_id[p]) for p in feature.parents)
 
             feature_tuples.append(
                 (
+                    row_id,
                     genome_id,
                     contig_name,
                     feature.strand,
@@ -413,15 +427,16 @@ class Database(PgAsyncDatabase):
         conn: asyncpg.Connection
         async with self.connect() as conn:
             async with conn.transaction():
-                logger.debug(f"bulk_ingest_genome_features: have {len(feature_types)} feature types for batch")
+                self.logger.debug(f"bulk_ingest_genome_features: have {len(feature_types)} feature types for batch")
                 await conn.executemany(
                     "INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING", feature_types
                 )
 
-                logger.debug(f"bulk_ingest_genome_features: have {len(feature_tuples)} features for batch")
+                self.logger.debug(f"bulk_ingest_genome_features: have {len(feature_tuples)} features for batch")
                 await conn.copy_records_to_table(
                     "genome_features",
                     columns=[
+                        "id",
                         "genome_id",
                         "contig_name",
                         "strand",
@@ -433,24 +448,24 @@ class Database(PgAsyncDatabase):
                     records=feature_tuples,
                 )
 
-                logger.debug(f"bulk_ingest_genome_features: have {len(attributes)} feature attribute records for batch")
+                self.logger.debug(
+                    f"bulk_ingest_genome_features: have {len(attributes)} feature attribute records for batch"
+                )
                 await conn.copy_records_to_table(
                     "genome_feature_attributes",
                     columns=[
-                        "genome_id",
-                        "feature_id",
+                        "feature",
                         "attr_tag",
                         "attr_val",
                     ],
                     records=attributes,
                 )
 
-                logger.debug(f"bulk_ingest_genome_features: have {len(entries)} feature entries for batch")
+                self.logger.debug(f"bulk_ingest_genome_features: have {len(entries)} feature entries for batch")
                 await conn.copy_records_to_table(
                     "genome_feature_entries",
                     columns=[
-                        "genome_id",
-                        "feature_id",
+                        "feature",
                         "start_pos",
                         "end_pos",
                         "position_text",
@@ -460,21 +475,20 @@ class Database(PgAsyncDatabase):
                     records=entries,
                 )
 
-                logger.debug(f"bulk_ingest_genome_features: have {len(parents)} feature parent records for batch")
+                self.logger.debug(f"bulk_ingest_genome_features: have {len(parents)} feature parent records for batch")
                 await conn.copy_records_to_table(
                     "genome_feature_parents",
                     columns=[
-                        "genome_id",
-                        "feature_id",
-                        "parent_id",
+                        "feature",
+                        "parent",
                     ],
                     records=parents,
                 )
 
 
 @lru_cache()
-def get_db(config: ConfigDependency) -> Database:  # pragma: no cover
-    return Database(config)
+def get_db(config: ConfigDependency, logger: LoggerDependency) -> Database:  # pragma: no cover
+    return Database(config, logger)
 
 
 DatabaseDependency = Annotated[Database, Depends(get_db)]

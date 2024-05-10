@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS genome_features (
     -- Feature characteristics / attributes:
     --  - technically, there can be multiple rows in a GFF3 file with the same ID, for discontinuous features.
     --    however, let's not support this, since it becomes tricky and doesn't help us much for our use cases.
-    feature_id VARCHAR(63) NOT NULL,
+    feature_id VARCHAR(63) NOT NULL,  -- Feature ID from the GFF3 file, in the context of the genome
     feature_name TEXT NOT NULL,
     feature_type VARCHAR(15) NOT NULL REFERENCES genome_feature_types,
     source TEXT NOT NULL,
@@ -80,7 +80,6 @@ CREATE TABLE IF NOT EXISTS genome_features (
     PRIMARY KEY (genome_id, feature_id),
     FOREIGN KEY (genome_id, contig_name) REFERENCES genome_contigs
 );
-
 CREATE INDEX IF NOT EXISTS genome_features_feature_id_trgm_gin ON genome_features USING GIN (feature_id gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin ON genome_features USING GIN (feature_name gin_trgm_ops);
 
@@ -95,7 +94,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_entries (
     -- Keys:
     FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
 );
-
+CREATE INDEX IF NOT EXISTS genome_feature_entries_genome_feature_idx ON genome_feature_entries (genome_id, feature_id);
 CREATE INDEX IF NOT EXISTS genome_feature_entries_position_text_trgm_gin
     ON genome_feature_entries
     USING GIN (position_text gin_trgm_ops);
@@ -109,6 +108,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_parents (
     FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features,
     FOREIGN KEY (genome_id, parent_id) REFERENCES genome_features
 );
+CREATE INDEX IF NOT EXISTS genome_feature_parents_genome_feature_idx ON genome_feature_parents (genome_id, feature_id);
 
 -- attributes can also have multiple values, so we don't enforce uniqueness on (genome_id, feature_id, attr_tag)
 -- these are non-Parent, non-ID attributes
@@ -120,5 +120,7 @@ CREATE TABLE IF NOT EXISTS genome_feature_attributes (
     attr_val TEXT NOT NULL,
     FOREIGN KEY (genome_id, feature_id) REFERENCES genome_features
 );
+CREATE INDEX IF NOT EXISTS genome_feature_attributes_genome_feature_idx
+    ON genome_feature_parents (genome_id, feature_id);
 CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_idx
     ON genome_feature_attributes (genome_id, feature_id, attr_tag);

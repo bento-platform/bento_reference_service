@@ -13,7 +13,7 @@ from .. import models as m
 from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..db import Database, DatabaseDependency
-from ..features import ingest_gene_feature_annotation
+from ..features import AnnotationGenomeNotFoundError, ingest_gene_feature_annotation
 from ..logger import LoggerDependency
 from ..streaming import generate_uri_streaming_response
 
@@ -28,12 +28,16 @@ DEPENDENCY_INGEST_REFERENCE_MATERIAL = authz_middleware.dep_require_permissions_
 genome_router = APIRouter(prefix="/genomes")
 
 
+def exc_genome_not_found(genome_id: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
+
+
 async def get_genome_or_raise_404(
     db: Database, genome_id: str, external_resource_uris: bool = True
 ) -> m.GenomeWithURIs:
     genome: m.GenomeWithURIs = await db.get_genome(genome_id, external_resource_uris=external_resource_uris)
     if genome is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
+        raise exc_genome_not_found(genome_id)
     return genome
 
 
@@ -256,6 +260,9 @@ async def genomes_detail_features_ingest_gff3(
 
         # ingest gene features into the database
         await ingest_gene_feature_annotation(genome_id, fn, fn_tbi, db, logger)
+
+    except AnnotationGenomeNotFoundError:
+        raise exc_genome_not_found(genome_id)
 
     finally:
         fn.unlink(missing_ok=True)

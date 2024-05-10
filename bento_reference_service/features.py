@@ -11,6 +11,7 @@ from . import models as m
 from .db import Database
 
 __all__ = [
+    "AnnotationGenomeNotFoundError",
     "ingest_gene_feature_annotation",
 ]
 
@@ -18,6 +19,10 @@ __all__ = [
 GFF_CAPTURED_ATTRIBUTES = frozenset({"ID", "Parent"})
 GFF_SKIPPED_FEATURE_TYPES = frozenset({"stop_codon_redefined_as_selenocysteine"})
 GFF_LOG_PROGRESS_INTERVAL = 1000
+
+
+class AnnotationGenomeNotFoundError(Exception):
+    pass
 
 
 class AnnotationIngestError(Exception):
@@ -104,7 +109,7 @@ async def ingest_gene_feature_annotation(
     genome: m.GenomeWithURIs | None = await db.get_genome(genome_id)
 
     if genome is None:
-        raise AnnotationIngestError(f"Genome with ID {genome_id} not found")
+        raise AnnotationGenomeNotFoundError(f"Genome with ID {genome_id} not found")
 
     logger.info(f"Ingesting gene features for genome {genome_id}...")
 

@@ -25,16 +25,12 @@ __all__ = ["genome_router"]
 genome_router = APIRouter(prefix="/genomes")
 
 
-def exc_genome_not_found(genome_id: str) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
-
-
 async def get_genome_or_raise_404(
     db: Database, genome_id: str, external_resource_uris: bool = True
 ) -> m.GenomeWithURIs:
     genome: m.GenomeWithURIs = await db.get_genome(genome_id, external_resource_uris=external_resource_uris)
     if genome is None:
-        raise exc_genome_not_found(genome_id)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
     return genome
 
 

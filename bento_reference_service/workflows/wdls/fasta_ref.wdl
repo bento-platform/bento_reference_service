@@ -79,7 +79,8 @@ workflow fasta_ref {
                 gff3_gz_tbi = select_first([gi.sorted_gff3_gz_tbi]),  # "
                 reference_url = reference_url,
                 token = access_token,
-                validate_ssl = validate_ssl
+                validate_ssl = validate_ssl,
+                wait_for_ref_ingest = ingest_metadata_into_ref.out
         }
     }
 }
@@ -219,6 +220,7 @@ task ingest_gff3_into_ref {
         String reference_url
         String token
         Boolean validate_ssl
+        File wait_for_ref_ingest  # dummy file to force this task to wait for the reference to be ingested first
     }
 
     command <<<

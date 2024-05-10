@@ -363,8 +363,6 @@ class Database(PgAsyncDatabase):
         LIMIT  {_q_param(max(limit, 0))}
         """
 
-        from datetime import datetime
-
         conn: asyncpg.Connection
         async with self.connect() as conn:
             id_res = await conn.fetch(id_query, g_id, *q_params)

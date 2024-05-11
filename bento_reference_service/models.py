@@ -11,6 +11,7 @@ __all__ = [
     "GenomeWithURIs",
     "GenomeFeatureEntry",
     "GenomeFeature",
+    "TaskStatus",
     "Task",
 ]
 
@@ -98,10 +99,13 @@ class GenomeFeature(BaseModel):
     parents: tuple[str, ...]
 
 
+TaskStatus = Literal["queued", "running", "success", "error"]
+
+
 class Task(BaseModel):
     id: int
     genome_id: str
     kind: Literal["ingest_features"]
-    status: Literal["active", "success", "error"]
+    status: TaskStatus
     message: str
     created: datetime

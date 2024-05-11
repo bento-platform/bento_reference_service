@@ -17,6 +17,7 @@ from .models import (
     OntologyTerm,
     GenomeFeatureEntry,
     GenomeFeature,
+    TaskStatus,
     Task,
 )
 
@@ -586,9 +587,7 @@ class Database(PgAsyncDatabase):
             res = await conn.fetch(f"SELECT * FROM tasks WHERE genome_id = $1 {where_part}", *params)
         return tuple(self.deserialize_task(r) for r in res)
 
-    async def update_task_status(
-        self, t_id: int, status: Literal["queued", "running", "success", "error"], message: str = ""
-    ):
+    async def update_task_status(self, t_id: int, status: TaskStatus, message: str = ""):
         conn: asyncpg.Connection
         async with self.connect() as conn:
             await conn.execute(

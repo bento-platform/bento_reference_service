@@ -68,13 +68,50 @@ task ingest_gff3_into_ref {
     }
 
     command <<<
-        curl ~{true="" false="-k" validate_ssl} \
-            -X PUT \
-            -F "gff3_gz=@~{gff3_gz}" \
-            -F "gff3_gz_tbi=@~{gff3_gz_tbi}" \
-            -H "Authorization: Bearer ~{token}" \
-            --fail-with-body \
-            "~{reference_url}/genomes/~{genome_id}/features.gff3.gz"
+        task_res=$(
+            curl ~{true="" false="-k" validate_ssl} \
+                -X PUT \
+                -F "gff3_gz=@~{gff3_gz}" \
+                -F "gff3_gz_tbi=@~{gff3_gz_tbi}" \
+                -H "Authorization: Bearer ~{token}" \
+                --fail-with-body \
+                "~{reference_url}/genomes/~{genome_id}/features.gff3.gz"
+        )
+        exit_code=$?
+        if [[ "${exit_code}" == 0 ]]; then
+            task_url=$(jq -r '.task' <<< "${task_res}")
+            while true; do
+                task_status_res=$(
+                    curl ~{true="" false="-k" validate_ssl} \
+                        -H "Authorization: Bearer ~{token}" \
+                        --fail-with-body \
+                        "${task_url}"
+                )
+
+                task_exit_code=$?
+                if [[ "${task_exit_code}" != 0 ]]; then
+                    echo "task status response returned non-success status code" >&2
+                    exit 1
+                fi
+
+                task_status=$(jq -r '.status' <<< "${task_status_res}")
+                task_message=$(jq -r '.message' <<< "${task_status_res}")
+
+                if [[ "${task_status}" == 'success' ]]; then
+                    echo "task succeeded with message: ${task_message}"
+                    break  # success
+                fi
+                if [[ "${task_status}" == 'error' ]]; then
+                    echo "task failed with message: ${task_message}" >&2
+                    exit 1
+                fi
+
+                # otherwise, running - wait
+                sleep 10
+            done
+        else
+            exit "${exit_code}"
+        fi
     >>>
 
     output {

@@ -251,6 +251,7 @@ class Database(PgAsyncDatabase):
             feature_type=rec["feature_type"],
             source=rec["source"],
             entries=tuple(map(Database.deserialize_genome_feature_entry, json.loads(rec["entries"] or "[]"))),
+            gene_id=rec["gene_nat_id"],
             attributes=json.loads(rec["attributes"] or "{}"),
             parents=tuple(rec["parents"] or ()),  # tuple of parent IDs
         )
@@ -281,6 +282,7 @@ class Database(PgAsyncDatabase):
             feature_name,
             feature_type,
             source,
+            (SELECT ggf.feature_id FROM genome_features ggf WHERE ggf.id = gf.gene_id) gene_nat_id,
             ({self._feature_inner_entries_query()}) entries,
             (
                 SELECT array_agg(gffp.feature_id) 
@@ -296,7 +298,7 @@ class Database(PgAsyncDatabase):
                     WHERE gfa.feature = gf.id
                     GROUP BY gfak.attr_key
                 )
-                SELECT jsonb_object_agg(attrs_tmp.attr_tag, attrs_tmp.attr_vals) FROM attrs_tmp
+                SELECT jsonb_object_agg(attrs_tmp.attr_key, attrs_tmp.attr_vals) FROM attrs_tmp
             ) attributes
         FROM genome_features gf
         WHERE gf.genome_id = $1 AND feature_id = any($2::text[])

@@ -149,15 +149,10 @@ async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses,
     assert res.status_code == status.HTTP_403_FORBIDDEN
 
 
-async def test_genome_feature_ingest(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    # setup: create genome  TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse)
-
+def _ingest_features(test_client: TestClient):
     hs = {"Authorization": "Token bearer"}
 
     # Test we can create a task for ingesting features
-
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
 
     with open(SARS_COV_2_GFF3_GZ_PATH, "rb") as gff3_fh, open(SARS_COV_2_GFF3_GZ_TBI_PATH, "rb") as tbi_fh:
         res = test_client.put(
@@ -186,3 +181,26 @@ async def test_genome_feature_ingest(test_client: TestClient, aioresponse: aiore
 
     assert task_status == "success"
     assert task_msg == "ingested 49 features"
+
+
+async def test_genome_feature_ingest(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+    hs = {"Authorization": "Token bearer"}
+
+    # setup: create genome  TODO: fixture
+    create_genome_with_permissions(test_client, aioresponse)
+
+    # Test we can ingest features
+
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
+    _ingest_features(test_client)
+
+    # Test we can delete
+    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}/features", headers=hs)
+    assert res.status_code == status.HTTP_204_NO_CONTENT
+
+    # Test we can ingest again
+    _ingest_features(test_client)
+
+    # Test we can delete again
+    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}/features", headers=hs)
+    assert res.status_code == status.HTTP_204_NO_CONTENT

@@ -2,8 +2,6 @@ import aiofiles
 import asyncpg
 import traceback
 
-from bento_lib.auth.permissions import P_DELETE_REFERENCE_MATERIAL
-from bento_lib.auth.resources import RESOURCE_EVERYTHING
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from typing import Annotated
@@ -16,7 +14,7 @@ from ..db import Database, DatabaseDependency
 from ..features import INGEST_FEATURES_TASK_KIND, ingest_features_task
 from ..logger import LoggerDependency
 from ..streaming import generate_uri_streaming_response
-from .constants import DEPENDENCY_INGEST_REFERENCE_MATERIAL
+from .constants import DEPENDENCY_DELETE_REFERENCE_MATERIAL, DEPENDENCY_INGEST_REFERENCE_MATERIAL
 
 
 __all__ = ["genome_router"]
@@ -123,11 +121,7 @@ async def genomes_detail(genome_id: str, db: DatabaseDependency) -> m.GenomeWith
 @genome_router.delete(
     "/{genome_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[
-        authz_middleware.dep_require_permissions_on_resource(
-            frozenset({P_DELETE_REFERENCE_MATERIAL}), RESOURCE_EVERYTHING
-        )
-    ],
+    dependencies=[DEPENDENCY_DELETE_REFERENCE_MATERIAL],
 )
 async def genomes_delete(genome_id: str, db: DatabaseDependency):
     # TODO: also delete DRS objects!!
@@ -183,6 +177,15 @@ async def genomes_detail_features(
         "results": results,
         "pagination": pagination,
     }
+
+
+@genome_router.delete(
+    "/{genome_id}/features",
+    dependencies=[DEPENDENCY_DELETE_REFERENCE_MATERIAL],
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def genomes_detail_features_delete(db: DatabaseDependency, genome_id: str):
+    await db.clear_genome_features(genome_id)
 
 
 @genome_router.get("/{genome_id}/features/{feature_id}", dependencies=[authz_middleware.dep_public_endpoint()])

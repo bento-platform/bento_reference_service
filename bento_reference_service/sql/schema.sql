@@ -90,6 +90,8 @@ CREATE INDEX IF NOT EXISTS genome_features_genome_idx ON genome_features (genome
 CREATE INDEX IF NOT EXISTS genome_features_feature_id_trgm_gin ON genome_features USING GIN (feature_id gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin
     ON genome_features USING GIN (feature_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS genome_features_feature_type_idx ON genome_features (feature_type);
+CREATE INDEX IF NOT EXISTS genome_features_gene_idx ON genome_features (gene_id);
 
 CREATE TABLE IF NOT EXISTS genome_feature_entries (
     id SERIAL PRIMARY KEY,
@@ -133,6 +135,8 @@ CREATE TABLE IF NOT EXISTS genome_feature_attribute_values (
     id INTEGER NOT NULL PRIMARY KEY,  -- attribute-value surrogate key
     attr_val TEXT NOT NULL  -- attribute value
 );
+CREATE INDEX IF NOT EXISTS genome_feature_attribute_values_attr_val_idx
+    ON genome_feature_attribute_values (attr_val);
 
 CREATE TABLE IF NOT EXISTS genome_feature_attributes (
     id SERIAL PRIMARY KEY,
@@ -140,8 +144,11 @@ CREATE TABLE IF NOT EXISTS genome_feature_attributes (
     attr_key INTEGER NOT NULL REFERENCES genome_feature_attribute_keys,
     attr_val INTEGER NOT NULL REFERENCES genome_feature_attribute_values
 );
-CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_idx
+CREATE INDEX IF NOT EXISTS genome_feature_attributes_feature_idx ON genome_feature_attributes (feature);
+CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_key_idx
     ON genome_feature_attributes (feature, attr_key);
+CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_val_idx
+    ON genome_feature_attributes (feature, attr_val);
 
 
 DO $$ BEGIN
@@ -159,3 +166,5 @@ CREATE TABLE IF NOT EXISTS tasks (
     message TEXT NOT NULL DEFAULT '',
     created TIMESTAMP DEFAULT (now() AT TIME ZONE 'utc')
 );
+CREATE INDEX IF NOT EXISTS tasks_genome_idx ON tasks (genome_id);
+CREATE INDEX IF NOT EXISTS tasks_kind_idx ON tasks (kind);

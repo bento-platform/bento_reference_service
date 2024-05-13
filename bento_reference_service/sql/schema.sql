@@ -160,7 +160,7 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS tasks (
     id SERIAL PRIMARY KEY,
-    genome_id VARCHAR(31) NOT NULL REFERENCES genomes,
+    genome_id VARCHAR(31) NOT NULL REFERENCES genomes ON DELETE CASCADE,
     kind task_kind NOT NULL,
     status task_status NOT NULL DEFAULT 'queued'::task_status,
     message TEXT NOT NULL DEFAULT '',

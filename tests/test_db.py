@@ -1,6 +1,14 @@
 from bento_reference_service.db import Database
 
-from .shared_data import TEST_GENOME_OF_FILE_URIS
+from .shared_data import TEST_GENOME_OF_FILE_URIS, TEST_GENOME_HG38_CHR1_F100K
+
+
+async def test_create_genome(db: Database, db_cleanup):
+    # SARS-CoV-2
+    await db.create_genome(TEST_GENOME_OF_FILE_URIS, return_external_resource_uris=False)
+
+    # hg38 chr1:1-100000
+    await db.create_genome(TEST_GENOME_HG38_CHR1_F100K, return_external_resource_uris=False)
 
 
 async def test_mark_running_as_error(db: Database, db_cleanup):

@@ -8,6 +8,7 @@ __all__ = [
     "SARS_COV_2_GFF3_GZ_PATH",
     "SARS_COV_2_GFF3_GZ_TBI_PATH",
     "TEST_GENOME_OF_FILE_URIS",
+    "TEST_GENOME_HG38_CHR1_F100K",
 ]
 
 DATA_DIR = (pathlib.Path(__file__).parent / "data").absolute()
@@ -39,5 +40,25 @@ TEST_GENOME_OF_FILE_URIS = {
             "length": 29903,
             "circular": False,
         },
+    ],
+}
+
+TEST_GENOME_HG38_CHR1_F100K = {
+    "id": "hg38-chr1-f100k",
+    "fasta": f"file://{DATA_DIR / 'hg38.chr1.f100k.fa'}",
+    "fai": f"file://{DATA_DIR / 'hg38.chr1.f100k.fa.fai'}",
+    "gff3_gz": f"file://{DATA_DIR / 'gencode.v45.first-few.gff3.gz'}",
+    "gff3_gz_tbi": f"file://{DATA_DIR / 'gencode.v45.first-few.gff3.gz.tbi'}",
+    "md5": "021db6573bbb7373345e6c3eec307632",
+    "ga4gh": "SQ.sY74le7UyqmFWoC1FWbvt8zHxjnpS8e2",
+    "contigs": [
+        {
+            "name": "chr1:1-100000",
+            "aliases": [],
+            "md5": "d12b28d76aa3c1c6bb143b8da8cce642",
+            "ga4gh": "SQ.jTVrjy4tzSYmexXZs_cfFWNuRKpvpVBI",
+            "length": 100000,
+            "circular": False,
+        }
     ],
 }

@@ -50,7 +50,7 @@ class Database(PgAsyncDatabase):
         return ContigWithRefgetURI(
             name=rec["contig_name"],
             # aliases is [None] if no aliases defined:
-            aliases=tuple(map(Database.deserialize_alias, filter(None, rec["aliases"]))),
+            aliases=tuple(map(Database.deserialize_alias, rec["aliases"])) if rec["aliases"] else (),
             md5=md5,
             ga4gh=ga4gh,
             length=rec["contig_length"],
@@ -70,7 +70,7 @@ class Database(PgAsyncDatabase):
         return GenomeWithURIs(
             id=rec["id"],
             # aliases is [None] if no aliases defined:
-            aliases=tuple(map(Database.deserialize_alias, filter(None, json.loads(rec["aliases"])))),
+            aliases=tuple(map(Database.deserialize_alias, json.loads(rec["aliases"]))) if rec["aliases"] else (),
             uri=genome_uri,
             contigs=tuple(map(self.deserialize_contig, json.loads(rec["contigs"]))),
             md5=rec["md5_checksum"],

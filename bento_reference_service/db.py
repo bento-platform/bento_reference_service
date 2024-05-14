@@ -107,20 +107,20 @@ class Database(PgAsyncDatabase):
                     taxon_id, 
                     taxon_label,
                     (
-                        SELECT json_agg(ga.*) FROM genome_aliases ga WHERE g.id = ga.genome_id
+                        SELECT jsonb_agg(ga.*) FROM genome_aliases ga WHERE g.id = ga.genome_id
                     ) aliases,
                     (
                         WITH contigs_tmp AS (
                             SELECT
                                 contig_name, contig_length, circular, md5_checksum, ga4gh_checksum,
                                 (
-                                    SELECT json_agg(gca.*)
+                                    SELECT jsonb_agg(gca.*)
                                     FROM genome_contig_aliases gca
                                     WHERE g.id = gca.genome_id AND gc.contig_name = gca.contig_name
                                 ) aliases
                             FROM genome_contigs gc WHERE g.id = gc.genome_id
                         )
-                        SELECT json_agg(contigs_tmp.*) FROM contigs_tmp
+                        SELECT jsonb_agg(contigs_tmp.*) FROM contigs_tmp
                     ) contigs
                 FROM genomes g {where_clause}
                 """,

@@ -106,7 +106,7 @@ class Database(PgAsyncDatabase):
                         WITH contigs_tmp AS (
                             SELECT
                                 contig_name, contig_length, circular, md5_checksum, ga4gh_checksum,
-                                array(
+                                (
                                     SELECT json_agg(gca.*)
                                     FROM genome_contig_aliases gca
                                     WHERE g.id = gca.genome_id AND gc.contig_name = gca.contig_name

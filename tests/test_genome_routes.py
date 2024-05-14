@@ -12,11 +12,14 @@ from .shared_data import (
     SARS_COV_2_GFF3_GZ_PATH,
     SARS_COV_2_GFF3_GZ_TBI_PATH,
     TEST_GENOME_OF_FILE_URIS,
+    TEST_GENOME_HG38_CHR1_F100K,
 )
 
 # all tests are async so that db_cleanup (an async fixture) properly works. not sure why it's this way.
 
 pytestmark = pytest.mark.asyncio()
+
+AUTHORIZATION_HEADER = {"Authorization": "Token bearer"}
 
 
 async def test_genome_list(test_client: TestClient):
@@ -46,9 +49,15 @@ async def test_404s_with_no_genomes(test_client: TestClient):
     assert res.status_code == status.HTTP_404_NOT_FOUND
 
 
-def create_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
+def create_covid_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
-    res = test_client.post("/genomes", json=TEST_GENOME_OF_FILE_URIS, headers={"Authorization": "Token bearer"})
+    res = test_client.post("/genomes", json=TEST_GENOME_OF_FILE_URIS, headers=AUTHORIZATION_HEADER)
+    return res
+
+
+def create_hg38_subset_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    res = test_client.post("/genomes", json=TEST_GENOME_HG38_CHR1_F100K, headers=AUTHORIZATION_HEADER)
     return res
 
 
@@ -57,19 +66,39 @@ async def test_genome_create(test_client: TestClient, aioresponse: aioresponses,
     assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
-    res = test_client.post("/genomes", json=TEST_GENOME_OF_FILE_URIS, headers={"Authorization": "Token bearer"})
+    res = test_client.post("/genomes", json=TEST_GENOME_OF_FILE_URIS, headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_403_FORBIDDEN
 
-    res = create_genome_with_permissions(test_client, aioresponse)
+    # SARS-CoV-2
+
+    res = create_covid_genome_with_permissions(test_client, aioresponse)
     assert res.status_code == status.HTTP_201_CREATED
 
-    res = create_genome_with_permissions(test_client, aioresponse)  # test we cannot recreate
+    res = create_covid_genome_with_permissions(test_client, aioresponse)  # test we cannot recreate
     assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    # - test list has one entry
+    res = test_client.get("/genomes")
+    assert res.status_code == status.HTTP_200_OK
+    assert len(res.json()) == 1
+
+    # hg38 subset
+
+    res = create_hg38_subset_genome_with_permissions(test_client, aioresponse)
+    assert res.status_code == status.HTTP_201_CREATED
+
+    res = create_hg38_subset_genome_with_permissions(test_client, aioresponse)  # test we cannot recreate
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    # - test list has two entries
+    res = test_client.get("/genomes")
+    assert res.status_code == status.HTTP_200_OK
+    assert len(res.json()) == 2
 
 
 async def test_genome_detail_endpoints(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
     # setup: create genome  TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse)
+    create_covid_genome_with_permissions(test_client, aioresponse)
 
     # tests
 
@@ -126,17 +155,17 @@ async def test_genome_detail_endpoints(test_client: TestClient, aioresponse: aio
 
 async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
     # setup: create genome  TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse)
+    create_covid_genome_with_permissions(test_client, aioresponse)
 
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
-    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers={"Authorization": "Token bearer"})
+    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT
 
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
-    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers={"Authorization": "Token bearer"})
+    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_404_NOT_FOUND  # already deleted
 
-    res = create_genome_with_permissions(test_client, aioresponse)  # test we can re-create
+    res = create_covid_genome_with_permissions(test_client, aioresponse)  # test we can re-create
     assert res.status_code == status.HTTP_201_CREATED
 
     # test that we cannot delete with no token
@@ -145,20 +174,18 @@ async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses,
 
     # test that we cannot delete with no permission
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
-    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers={"Authorization": "Token bearer"})
+    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_403_FORBIDDEN
 
 
-def _ingest_features(test_client: TestClient):
-    hs = {"Authorization": "Token bearer"}
-
+def _ingest_covid_features(test_client: TestClient):
     # Test we can create a task for ingesting features
 
     with open(SARS_COV_2_GFF3_GZ_PATH, "rb") as gff3_fh, open(SARS_COV_2_GFF3_GZ_TBI_PATH, "rb") as tbi_fh:
         res = test_client.put(
             f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz",
             files={"gff3_gz": gff3_fh, "gff3_gz_tbi": tbi_fh},
-            headers=hs,
+            headers=AUTHORIZATION_HEADER,
         )
 
     assert res.status_code == status.HTTP_202_ACCEPTED
@@ -172,7 +199,7 @@ def _ingest_features(test_client: TestClient):
     task_status: str = ""
     task_msg: str = ""
     while not finished:
-        res = test_client.get(f"/tasks/{task_id}", headers=hs)
+        res = test_client.get(f"/tasks/{task_id}", headers=AUTHORIZATION_HEADER)
         assert res.status_code == status.HTTP_200_OK
         rd = res.json()
         task_status = rd["status"]
@@ -184,23 +211,21 @@ def _ingest_features(test_client: TestClient):
 
 
 async def test_genome_feature_ingest(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    hs = {"Authorization": "Token bearer"}
-
-    # setup: create genome  TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse)
+    # setup: create SARS-CoV-2 genome  TODO: fixture
+    create_covid_genome_with_permissions(test_client, aioresponse)
 
     # Test we can ingest features
 
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
-    _ingest_features(test_client)
+    _ingest_covid_features(test_client)
 
     # Test we can delete
-    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}/features", headers=hs)
+    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}/features", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT
 
     # Test we can ingest again
-    _ingest_features(test_client)
+    _ingest_covid_features(test_client)
 
     # Test we can delete again
-    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}/features", headers=hs)
+    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}/features", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT

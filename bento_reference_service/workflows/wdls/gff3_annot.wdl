@@ -27,6 +27,8 @@ workflow gff3_annot {
             token = access_token,
             validate_ssl = validate_ssl
     }
+
+    output {}
 }
 
 # TODO: shared file with this task

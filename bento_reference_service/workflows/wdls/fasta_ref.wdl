@@ -83,6 +83,8 @@ workflow fasta_ref {
                 wait_for_ref_ingest = ingest_metadata_into_ref.out
         }
     }
+
+    output {}
 }
 
 task uncompress_fasta_and_generate_fai_if_needed {

@@ -20,7 +20,7 @@ __all__ = [
 INGEST_FEATURES_TASK_KIND = "ingest_features"
 
 GFF_ID_ATTR = "ID"
-GFF_PARENT_ATTR = "ID"
+GFF_PARENT_ATTR = "Parent"
 GFF_GENCODE_GENE_ID_ATTR = "gene_id"
 GFF_CAPTURED_ATTRIBUTES = frozenset({GFF_ID_ATTR, GFF_PARENT_ATTR, GFF_GENCODE_GENE_ID_ATTR})
 GFF_SKIPPED_FEATURE_TYPES = frozenset({"stop_codon_redefined_as_selenocysteine"})

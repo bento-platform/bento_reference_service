@@ -45,12 +45,13 @@ TEST_GENOME_OF_FILE_URIS = {
 
 TEST_GENOME_HG38_CHR1_F100K = {
     "id": "hg38-chr1-f100k",
+    "md5": "021db6573bbb7373345e6c3eec307632",
+    "ga4gh": "SQ.sY74le7UyqmFWoC1FWbvt8zHxjnpS8e2",
     "fasta": f"file://{DATA_DIR / 'hg38.chr1.f100k.fa'}",
     "fai": f"file://{DATA_DIR / 'hg38.chr1.f100k.fa.fai'}",
     "gff3_gz": f"file://{DATA_DIR / 'gencode.v45.first-few.gff3.gz'}",
     "gff3_gz_tbi": f"file://{DATA_DIR / 'gencode.v45.first-few.gff3.gz.tbi'}",
-    "md5": "021db6573bbb7373345e6c3eec307632",
-    "ga4gh": "SQ.sY74le7UyqmFWoC1FWbvt8zHxjnpS8e2",
+    "taxon": {"id": "NCBITaxon:9606", "label": "Homo sapiens"},
     "contigs": [
         {
             "name": "chr1:1-100000",

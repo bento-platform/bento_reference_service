@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS genome_feature_attribute_values (
 );
 CREATE INDEX IF NOT EXISTS genome_feature_attribute_values_attr_val_idx
     ON genome_feature_attribute_values (attr_val);
+CREATE INDEX IF NOT EXISTS genome_feature_attribute_values_attr_val_trgm_gin
+    ON genome_feature_attribute_values USING GIN (attr_val gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS genome_feature_attributes (
     id SERIAL PRIMARY KEY,

@@ -323,12 +323,13 @@ class Database(PgAsyncDatabase):
     async def query_genome_features(
         self,
         g_id: str,
-        q: str | None,
-        name: str | None,
-        position: str | None,
-        start: int | None,
-        end: int | None,
-        feature_types: list[str] | None,
+        /,
+        q: str | None = None,
+        name: str | None = None,
+        position: str | None = None,
+        start: int | None = None,
+        end: int | None = None,
+        feature_types: list[str] | None = None,
         offset: int = 0,
         limit: int = 10,
     ) -> tuple[list[GenomeFeature], dict]:  # list of genome features + pagination dict object
@@ -469,7 +470,12 @@ class Database(PgAsyncDatabase):
 
                             attributes.append((row_id, ak, av))
 
-                    parents.extend((row_id, feature_row_ids[p]) for p in feature.parents)
+                    for p in feature.parents:
+                        try:
+                            parents.append((row_id, feature_row_ids[p]))
+                        except KeyError as e:
+                            self.logger.error(f"Could not find parent row ID '{p}' for feature {feature.feature_id}")
+                            raise e
 
                     feature_tuples.append(
                         (

@@ -63,7 +63,7 @@ class Database(PgAsyncDatabase):
         return GenomeWithURIs(
             id=rec["id"],
             # aliases is [None] if no aliases defined:
-            aliases=tuple(map(Database.deserialize_alias, filter(None, rec["aliases"]))),
+            aliases=tuple(map(Database.deserialize_alias, filter(None, json.loads(rec["aliases"])))),
             uri=genome_uri,
             contigs=tuple(map(self.deserialize_contig, json.loads(rec["contigs"]))),
             md5=rec["md5_checksum"],
@@ -99,7 +99,7 @@ class Database(PgAsyncDatabase):
                     gff3_gz_tbi_uri, 
                     taxon_id, 
                     taxon_label,
-                    array(
+                    (
                         SELECT json_agg(ga.*) FROM genome_aliases ga WHERE g.id = ga.genome_id
                     ) aliases,
                     (

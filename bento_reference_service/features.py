@@ -20,6 +20,7 @@ __all__ = [
 INGEST_FEATURES_TASK_KIND = "ingest_features"
 
 GFF_ID_ATTR = "ID"
+GFF_NAME_ATTR = "Name"
 GFF_PARENT_ATTR = "Parent"
 GFF_GENCODE_GENE_ID_ATTR = "gene_id"
 GFF_CAPTURED_ATTRIBUTES = frozenset({GFF_ID_ATTR, GFF_PARENT_ATTR, GFF_GENCODE_GENE_ID_ATTR})
@@ -60,7 +61,7 @@ def extract_feature_id(record, attributes: dict[str, list[str]]) -> str | None:
 
 def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None:
     feature_type = record.feature.lower()
-    feature_name: str | None = attributes.get("Name", (None,))[0]
+    feature_name: str | None = attributes.get(GFF_NAME_ATTR, (None,))[0]
 
     if feature_name:
         return feature_name

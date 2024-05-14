@@ -228,7 +228,7 @@ def _test_ingest_genome_features(test_client: TestClient, genome: Genome, expect
 
 
 @pytest.mark.parametrize(
-    "genome,expected_features", [(TEST_GENOME_SARS_COV_2_OBJ, 49), (TEST_GENOME_HG38_CHR1_F100K_OBJ, 14)]
+    "genome,expected_features", [(TEST_GENOME_SARS_COV_2_OBJ, 49), (TEST_GENOME_HG38_CHR1_F100K_OBJ, 13)]
 )
 async def test_genome_feature_ingest(
     test_client: TestClient, aioresponse: aioresponses, db_cleanup, genome: Genome, expected_features: int

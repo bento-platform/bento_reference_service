@@ -485,7 +485,10 @@ class Database(PgAsyncDatabase):
                         )
                     )
 
-                self.logger.debug(f"bulk_ingest_genome_features: have {len(feature_types)} feature types for batch")
+                self.logger.debug(
+                    f"bulk_ingest_genome_features: have {len(feature_types)} feature types for batch "
+                    f"({[ft[0] for ft in feature_types][:20]})"
+                )
                 await conn.executemany(
                     "INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING", feature_types
                 )

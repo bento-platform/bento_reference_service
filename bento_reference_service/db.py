@@ -388,6 +388,22 @@ class Database(PgAsyncDatabase):
         async with self.connect() as conn:
             await conn.execute("DELETE FROM genome_features WHERE genome_id = $1", g_id)
 
+    async def get_genome_feature_attribute_keys(
+        self, existing_conn: asyncpg.Connection | None
+    ) -> list[tuple[int, str]]:
+        conn: asyncpg.Connection
+        async with self.connect(existing_conn) as conn:
+            res = await conn.fetch("SELECT id, attr_key FROM genome_feature_attribute_keys")
+        return [(row["id"], row["attr_key"]) for row in res]
+
+    async def get_genome_feature_attribute_values(
+        self, existing_conn: asyncpg.Connection | None
+    ) -> list[tuple[int, str]]:
+        conn: asyncpg.Connection
+        async with self.connect(existing_conn) as conn:
+            res = await conn.fetch("SELECT id, attr_val FROM genome_feature_attribute_values")
+        return [(row["id"], row["attr_val"]) for row in res]
+
     async def bulk_ingest_genome_features(self, features: tuple[GenomeFeature, ...]):
         # Manually generate sequential IDs
         # This requires an exclusive write lock on the database, so we don't get conflicting IDs
@@ -413,8 +429,12 @@ class Database(PgAsyncDatabase):
                 current_attr_value_id: int = vr["next_id"]
 
                 feature_row_ids: dict[str, int] = {}
-                attr_key_ids: dict[str, int] = {}
-                attr_value_ids: dict[str, int] = {}
+                attr_key_ids: dict[str, int] = {t[1]: t[0] for t in await self.get_genome_feature_attribute_keys(conn)}
+                new_attr_key_ids: dict[str, int] = {}
+                attr_value_ids: dict[str, int] = {
+                    t[1]: t[0] for t in await self.get_genome_feature_attribute_values(conn)
+                }
+                new_attr_value_ids: dict[str, int] = {}
 
                 # ------------------------------------------------------------------------------------------------------
 
@@ -455,17 +475,21 @@ class Database(PgAsyncDatabase):
                     for attr_key, attr_vals in feature.attributes.items():
                         if attr_key in attr_key_ids:
                             ak = attr_key_ids[attr_key]
+                        elif attr_key in new_attr_key_ids:
+                            ak = new_attr_key_ids[attr_key]
                         else:
                             ak = current_attr_key_id
-                            attr_key_ids[attr_key] = current_attr_key_id
+                            new_attr_key_ids[attr_key] = current_attr_key_id
                             current_attr_key_id += 1
 
                         for attr_val in attr_vals:
                             if attr_val in attr_value_ids:
                                 av = attr_value_ids[attr_val]
+                            elif attr_val in new_attr_value_ids:
+                                av = new_attr_value_ids[attr_val]
                             else:
                                 av = current_attr_value_id
-                                attr_value_ids[attr_val] = current_attr_value_id
+                                new_attr_value_ids[attr_val] = current_attr_value_id
                                 current_attr_value_id += 1
 
                             attributes.append((row_id, ak, av))
@@ -516,20 +540,20 @@ class Database(PgAsyncDatabase):
                     records=feature_tuples,
                 )
 
-                attribute_keys: list[tuple[int, str]] = [(ik, sk) for sk, ik in attr_key_ids.items()]
+                new_attribute_keys: list[tuple[int, str]] = [(ik, sk) for sk, ik in new_attr_key_ids.items()]
                 self.logger.debug(
-                    f"bulk_ingest_genome_features: have {len(attribute_keys)} feature attribute keys for batch"
+                    f"bulk_ingest_genome_features: have {len(new_attribute_keys)} new feature attribute keys for batch"
                 )
                 await conn.copy_records_to_table(
-                    "genome_feature_attribute_keys", columns=["id", "attr_key"], records=attribute_keys
+                    "genome_feature_attribute_keys", columns=["id", "attr_key"], records=new_attribute_keys
                 )
 
-                attribute_values: list[tuple[int, str]] = [(iv, sv) for sv, iv in attr_value_ids.items()]
+                new_attribute_values: list[tuple[int, str]] = [(iv, sv) for sv, iv in new_attr_value_ids.items()]
                 self.logger.debug(
-                    f"bulk_ingest_genome_features: have {len(attribute_keys)} feature attribute values for batch"
+                    f"bulk_ingest_genome_features: have {len(new_attribute_keys)} feature attribute values for batch"
                 )
                 await conn.copy_records_to_table(
-                    "genome_feature_attribute_values", columns=["id", "attr_val"], records=attribute_values
+                    "genome_feature_attribute_values", columns=["id", "attr_val"], records=new_attribute_values
                 )
 
                 self.logger.debug(

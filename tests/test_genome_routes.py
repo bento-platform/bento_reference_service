@@ -5,14 +5,18 @@ from fastapi import status
 from fastapi.testclient import TestClient
 from httpx import Response
 
+from bento_reference_service.models import Genome
+
 from .shared_data import (
     SARS_COV_2_GENOME_ID,
     SARS_COV_2_FASTA_PATH,
     SARS_COV_2_FAI_PATH,
     SARS_COV_2_GFF3_GZ_PATH,
     SARS_COV_2_GFF3_GZ_TBI_PATH,
-    TEST_GENOME_OF_FILE_URIS,
+    TEST_GENOME_SARS_COV_2,
+    TEST_GENOME_SARS_COV_2_OBJ,
     TEST_GENOME_HG38_CHR1_F100K,
+    TEST_GENOME_HG38_CHR1_F100K_OBJ,
 )
 
 # all tests are async so that db_cleanup (an async fixture) properly works. not sure why it's this way.
@@ -49,24 +53,26 @@ async def test_404s_with_no_genomes(test_client: TestClient):
     assert res.status_code == status.HTTP_404_NOT_FOUND
 
 
-def create_covid_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
+def create_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses, genome: dict) -> Response:
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
-    res = test_client.post("/genomes", json=TEST_GENOME_OF_FILE_URIS, headers=AUTHORIZATION_HEADER)
+    res = test_client.post("/genomes", json=genome, headers=AUTHORIZATION_HEADER)
     return res
+
+
+def create_covid_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
+    return create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
 
 
 def create_hg38_subset_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
-    res = test_client.post("/genomes", json=TEST_GENOME_HG38_CHR1_F100K, headers=AUTHORIZATION_HEADER)
-    return res
+    return create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_HG38_CHR1_F100K)
 
 
 async def test_genome_create(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    res = test_client.post("/genomes", json=TEST_GENOME_OF_FILE_URIS)
+    res = test_client.post("/genomes", json=TEST_GENOME_SARS_COV_2)
     assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
-    res = test_client.post("/genomes", json=TEST_GENOME_OF_FILE_URIS, headers=AUTHORIZATION_HEADER)
+    res = test_client.post("/genomes", json=TEST_GENOME_SARS_COV_2, headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_403_FORBIDDEN
 
     # SARS-CoV-2
@@ -178,15 +184,26 @@ async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses,
     assert res.status_code == status.HTTP_403_FORBIDDEN
 
 
-def _ingest_covid_features(test_client: TestClient):
-    # Test we can create a task for ingesting features
+def _file_uri_to_path(uri: str) -> str:
+    return uri.replace("file://", "")
 
-    with open(SARS_COV_2_GFF3_GZ_PATH, "rb") as gff3_fh, open(SARS_COV_2_GFF3_GZ_TBI_PATH, "rb") as tbi_fh:
-        res = test_client.put(
-            f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz",
+
+def _put_genome_features(test_client: TestClient, genome: Genome) -> Response:
+    gff3_gz = _file_uri_to_path(genome.gff3_gz)
+    gff3_gz_tbi = _file_uri_to_path(genome.gff3_gz_tbi)
+
+    with open(gff3_gz, "rb") as gff3_fh, open(gff3_gz_tbi, "rb") as tbi_fh:
+        return test_client.put(
+            f"/genomes/{genome.id}/features.gff3.gz",
             files={"gff3_gz": gff3_fh, "gff3_gz_tbi": tbi_fh},
             headers=AUTHORIZATION_HEADER,
         )
+
+
+def _test_ingest_genome_features(test_client: TestClient, genome: Genome, expected_features: int):
+    # Test we can create a task for ingesting features
+
+    res = _put_genome_features(test_client, genome)
 
     assert res.status_code == status.HTTP_202_ACCEPTED
     data = res.json()
@@ -207,25 +224,36 @@ def _ingest_covid_features(test_client: TestClient):
         finished = task_status in {"success", "error"}
 
     assert task_status == "success"
-    assert task_msg == "ingested 49 features"
+    assert task_msg == f"ingested {expected_features} features"
 
 
-async def test_genome_feature_ingest(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    # setup: create SARS-CoV-2 genome  TODO: fixture
-    create_covid_genome_with_permissions(test_client, aioresponse)
+@pytest.mark.parametrize(
+    "genome,expected_features", [(TEST_GENOME_SARS_COV_2_OBJ, 49), (TEST_GENOME_HG38_CHR1_F100K_OBJ, 14)]
+)
+async def test_genome_feature_ingest(
+    test_client: TestClient, aioresponse: aioresponses, db_cleanup, genome: Genome, expected_features: int
+):
+    # setup: create genome
+    create_genome_with_permissions(test_client, aioresponse, genome.model_dump(mode="json"))
+
+    # Test we cannot ingest without permissions
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
+    res = _put_genome_features(test_client, genome)
+    assert res.status_code == status.HTTP_403_FORBIDDEN
 
     # Test we can ingest features
 
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
-    _ingest_covid_features(test_client)
+    _test_ingest_genome_features(test_client, genome, expected_features)
 
     # Test we can delete
-    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}/features", headers=AUTHORIZATION_HEADER)
+    res = test_client.delete(f"/genomes/{genome.id}/features", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT
 
     # Test we can ingest again
-    _ingest_covid_features(test_client)
+    _test_ingest_genome_features(test_client, genome, expected_features)
 
     # Test we can delete again
-    res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}/features", headers=AUTHORIZATION_HEADER)
+
+    res = test_client.delete(f"/genomes/{genome.id}/features", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT

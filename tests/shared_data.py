@@ -1,4 +1,5 @@
 import pathlib
+from bento_reference_service.models import Genome
 
 __all__ = [
     "DATA_DIR",
@@ -7,8 +8,10 @@ __all__ = [
     "SARS_COV_2_FAI_PATH",
     "SARS_COV_2_GFF3_GZ_PATH",
     "SARS_COV_2_GFF3_GZ_TBI_PATH",
-    "TEST_GENOME_OF_FILE_URIS",
+    "TEST_GENOME_SARS_COV_2",
+    "TEST_GENOME_SARS_COV_2_OBJ",
     "TEST_GENOME_HG38_CHR1_F100K",
+    "TEST_GENOME_HG38_CHR1_F100K_OBJ",
 ]
 
 DATA_DIR = (pathlib.Path(__file__).parent / "data").absolute()
@@ -21,7 +24,7 @@ SARS_COV_2_FAI_PATH = DATA_DIR / "sars_cov_2.fa.fai"
 SARS_COV_2_GFF3_GZ_PATH = DATA_DIR / "sars_cov_2.gff3.gz"
 SARS_COV_2_GFF3_GZ_TBI_PATH = DATA_DIR / "sars_cov_2.gff3.gz.tbi"
 
-TEST_GENOME_OF_FILE_URIS = {
+TEST_GENOME_SARS_COV_2 = {
     "id": SARS_COV_2_GENOME_ID,
     "aliases": [SARS_COV_2_ALIAS, SARS_COV_2_FAKE_ALIAS],
     "md5": "b98334cd0015ee1b1d2dc3b9d81b325e",
@@ -42,6 +45,7 @@ TEST_GENOME_OF_FILE_URIS = {
         },
     ],
 }
+TEST_GENOME_SARS_COV_2_OBJ = Genome(**TEST_GENOME_SARS_COV_2)
 
 TEST_GENOME_HG38_CHR1_F100K = {
     "id": "hg38-chr1-f100k",
@@ -63,3 +67,4 @@ TEST_GENOME_HG38_CHR1_F100K = {
         }
     ],
 }
+TEST_GENOME_HG38_CHR1_F100K_OBJ = Genome(**TEST_GENOME_HG38_CHR1_F100K)

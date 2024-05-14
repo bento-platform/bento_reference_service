@@ -55,7 +55,7 @@ class StreamingUnsupportedURIScheme(Exception):
 
 
 def tcp_connector(config: Config) -> aiohttp.TCPConnector:
-    return aiohttp.TCPConnector(verify_ssl=config.bento_validate_ssl)
+    return aiohttp.TCPConnector(ssl=config.bento_validate_ssl)
 
 
 async def stream_file(

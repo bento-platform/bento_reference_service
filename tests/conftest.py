@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 import os
 
 os.environ["BENTO_DEBUG"] = "true"
+os.environ["BENTO_VALIDATE_SSL"] = "false"
 os.environ["CORS_ORIGINS"] = "*"
 os.environ["BENTO_AUTHZ_SERVICE_URL"] = "https://authz.local"
 

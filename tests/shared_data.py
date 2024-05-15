@@ -10,6 +10,7 @@ __all__ = [
     "SARS_COV_2_GFF3_GZ_TBI_PATH",
     "TEST_GENOME_SARS_COV_2",
     "TEST_GENOME_SARS_COV_2_OBJ",
+    "HG38_CHR1_F100K_GENOME_ID",
     "TEST_GENOME_HG38_CHR1_F100K",
     "TEST_GENOME_HG38_CHR1_F100K_OBJ",
 ]
@@ -47,10 +48,11 @@ TEST_GENOME_SARS_COV_2 = {
 }
 TEST_GENOME_SARS_COV_2_OBJ = Genome(**TEST_GENOME_SARS_COV_2)
 
+HG38_CHR1_F100K_GENOME_ID = "hg38-chr1-f100k"
 TEST_GENOME_HG38_CHR1_F100K = {
-    "id": "hg38-chr1-f100k",
-    "md5": "021db6573bbb7373345e6c3eec307632",
-    "ga4gh": "SQ.sY74le7UyqmFWoC1FWbvt8zHxjnpS8e2",
+    "id": HG38_CHR1_F100K_GENOME_ID,
+    "md5": "80c4a2f1d70d2ca5babe40ca24e47e85",
+    "ga4gh": "SQ.Sd58mcdOdfBAdpwaLFeI5bHwjspHd2D6",
     "fasta": f"file://{DATA_DIR / 'hg38.chr1.f100k.fa'}",
     "fai": f"file://{DATA_DIR / 'hg38.chr1.f100k.fa.fai'}",
     "gff3_gz": f"file://{DATA_DIR / 'gencode.v45.first-few.gff3.gz'}",
@@ -58,7 +60,7 @@ TEST_GENOME_HG38_CHR1_F100K = {
     "taxon": {"id": "NCBITaxon:9606", "label": "Homo sapiens"},
     "contigs": [
         {
-            "name": "chr1:1-100000",
+            "name": "chr1",
             "aliases": [],
             "md5": "d12b28d76aa3c1c6bb143b8da8cce642",
             "ga4gh": "SQ.jTVrjy4tzSYmexXZs_cfFWNuRKpvpVBI",

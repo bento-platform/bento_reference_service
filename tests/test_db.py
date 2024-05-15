@@ -7,7 +7,12 @@ from pathlib import Path
 from bento_reference_service.db import Database
 from bento_reference_service.features import ingest_features
 
-from .shared_data import SARS_COV_2_GENOME_ID, TEST_GENOME_SARS_COV_2_OBJ, TEST_GENOME_HG38_CHR1_F100K_OBJ
+from .shared_data import (
+    SARS_COV_2_GENOME_ID,
+    TEST_GENOME_SARS_COV_2_OBJ,
+    HG38_CHR1_F100K_GENOME_ID,
+    TEST_GENOME_HG38_CHR1_F100K_OBJ,
+)
 
 pytestmark = pytest.mark.asyncio()
 
@@ -32,8 +37,8 @@ async def test_create_genome(db: Database, db_cleanup):
         ("ga4gh:SQ.SyGVJg_YRedxvsjpqNdUgyyqx7lUfu_D", SARS_COV_2_GENOME_ID, "MN908947.3"),
         ("105c82802b67521950854a851fc6eefd", SARS_COV_2_GENOME_ID, "MN908947.3"),
         ("md5:105c82802b67521950854a851fc6eefd", SARS_COV_2_GENOME_ID, "MN908947.3"),
-        ("d12b28d76aa3c1c6bb143b8da8cce642", TEST_GENOME_HG38_CHR1_F100K_OBJ.id, "chr1:1-100000"),
-        ("md5:d12b28d76aa3c1c6bb143b8da8cce642", TEST_GENOME_HG38_CHR1_F100K_OBJ.id, "chr1:1-100000"),
+        ("d12b28d76aa3c1c6bb143b8da8cce642", TEST_GENOME_HG38_CHR1_F100K_OBJ.id, "chr1"),
+        ("md5:d12b28d76aa3c1c6bb143b8da8cce642", TEST_GENOME_HG38_CHR1_F100K_OBJ.id, "chr1"),
     ],
 )
 async def test_get_genome_and_contig_by_checksum_str(db: Database, db_cleanup, checksum, genome_id, contig_name):
@@ -80,6 +85,21 @@ async def _set_up_sars_cov_2_genome_and_features(db: Database, logger: logging.L
     await ingest_features(SARS_COV_2_GENOME_ID, gff3_gz_path, gff3_gz_tbi_path, db, logger)
 
 
+async def _set_up_hg38_subset_genome_and_features(db: Database, logger: logging.Logger):
+    await _set_up_hg38_subset_genome(db)
+
+    # prerequesite: ingest features
+    gff3_gz_path = Path(TEST_GENOME_HG38_CHR1_F100K_OBJ.gff3_gz.replace("file://", ""))
+    gff3_gz_tbi_path = Path(TEST_GENOME_HG38_CHR1_F100K_OBJ.gff3_gz_tbi.replace("file://", ""))
+    await ingest_features(HG38_CHR1_F100K_GENOME_ID, gff3_gz_path, gff3_gz_tbi_path, db, logger)
+
+
+GENOME_ID_TO_SET_UP_FN = {
+    SARS_COV_2_GENOME_ID: _set_up_sars_cov_2_genome_and_features,
+    HG38_CHR1_F100K_GENOME_ID: _set_up_hg38_subset_genome_and_features,
+}
+
+
 async def test_genome_features_summary(db: Database, db_cleanup):
     logger = logging.getLogger(__name__)
     await _set_up_sars_cov_2_genome_and_features(db, logger)
@@ -87,14 +107,27 @@ async def test_genome_features_summary(db: Database, db_cleanup):
     assert sum(s.values()) == 49  # total # of features, divided by type in summary response
 
 
-async def test_filter_and_query_genome_features(db: Database, db_cleanup):
-    logger = logging.getLogger(__name__)
-    await _set_up_sars_cov_2_genome_and_features(db, logger)
-
-    # - should get back 2 genes and 1 transcript
-    res, page = await db.filter_genome_features(SARS_COV_2_GENOME_ID, name="ORF1ab")
-    assert len(res) == 3
-    assert page["total"] == 3
+@pytest.mark.parametrize(
+    "genome_id,filters,n_results",
+    [
+        # SARS-CoV-2
+        (SARS_COV_2_GENOME_ID, dict(name="ORF1ab"), 3),  # should get back 2 genes and 1 transcript
+        (SARS_COV_2_GENOME_ID, dict(start=1, end=1000), 9),  # region + 8 related to ORF1ab
+        # hg38 subset
+        (HG38_CHR1_F100K_GENOME_ID, dict(position="chr1:11869-"), 3),
+        (HG38_CHR1_F100K_GENOME_ID, dict(start=12000), 10),
+        (HG38_CHR1_F100K_GENOME_ID, dict(start=11869, end=11869), 3),
+        (HG38_CHR1_F100K_GENOME_ID, dict(start=12000, end=13000), 7),
+        (HG38_CHR1_F100K_GENOME_ID, dict(start=13000, end=13000), 0),
+        (HG38_CHR1_F100K_GENOME_ID, dict(feature_types=["gene"]), 2),
+        (HG38_CHR1_F100K_GENOME_ID, dict(limit=20), 13),
+    ],
+)
+async def test_filter_genome_features(db: Database, db_cleanup, genome_id: str, filters: dict, n_results: int):
+    await (GENOME_ID_TO_SET_UP_FN[genome_id])(db, logging.getLogger(__name__))
+    res, page = await db.filter_genome_features(genome_id, **filters)
+    assert len(res) == n_results
+    assert page["total"] == n_results
 
 
 async def test_query_genome_features(db: Database, db_cleanup):

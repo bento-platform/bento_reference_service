@@ -420,7 +420,7 @@ class Database(PgAsyncDatabase):
         if feature_types:
             or_items = []
             for ft in feature_types:
-                gf_where_items.append(f"gf.feature_type = f{_q_param(ft)}")
+                or_items.append(f"gf.feature_type = {_q_param(ft)}")
             gf_where_items.append(f"({' OR '.join(or_items)})")
 
         where_clause = " AND ".join(gf_where_items) if gf_where_items else "true"

@@ -106,6 +106,104 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
             return None
 
 
+def iter_features(
+    # parameters:
+    genome: m.Genome,
+    gff_path: Path,
+    gff_index_path: Path,
+    # dependencies:
+    logger: logging.Logger,
+) -> Generator[tuple[m.GenomeFeature, ...], None, None]:
+    """
+    Given genome and a GFF3 for the genome, iterate through the lines of the GFF3 and build genome feature objects.
+    """
+
+    genome_id = genome.id
+
+    gff = pysam.TabixFile(str(gff_path), index=str(gff_index_path))
+    total_processed: int = 0
+
+    try:
+        features_by_id: dict[str, m.GenomeFeature] = {}
+
+        for contig in genome.contigs:
+            contig_name = contig.name
+
+            logger.info(f"Indexing features from contig {contig_name}")
+
+            try:
+                fetch_iter = gff.fetch(contig.name, parser=pysam.asGFF3())
+            except ValueError as e:
+                logger.warning(f"Could not find contig with name {contig_name} in GFF3; skipping... ({e})")
+                continue
+
+            for i, rec in enumerate(fetch_iter):
+                feature_type = rec.feature
+
+                if feature_type in GFF_SKIPPED_FEATURE_TYPES:
+                    continue  # Don't ingest stop_codon_redefined_as_selenocysteine annotations
+
+                # for some reason, dict(...) returns the attributes dict:
+                feature_raw_attributes = dict(rec)
+
+                try:
+                    record_attributes = parse_attributes(feature_raw_attributes)
+                    feature_id = extract_feature_id(rec, record_attributes)
+                    feature_name = extract_feature_name(rec, record_attributes)
+
+                    if feature_id is None:
+                        logger.warning(f"Skipping unsupported feature {i}: type={feature_type}, no ID retrieval; {rec}")
+                        continue
+
+                    if feature_name is None:
+                        logger.warning(f"Using ID as name for feature {i}: {rec}")
+                        feature_name = feature_id
+
+                    # 'phase' is misnamed / legacy-named as 'frame' in PySAM's GFF3 parser:
+                    entry = m.GenomeFeatureEntry(start_pos=rec.start, end_pos=rec.end, score=rec.score, phase=rec.frame)
+
+                    if feature_id in features_by_id:
+                        features_by_id[feature_id].entries.append(entry)
+                    else:
+                        attributes: dict[str, list[str]] = {
+                            # skip attributes which have been captured in the above information:
+                            k: vs
+                            for k, vs in record_attributes.items()
+                            if k not in GFF_CAPTURED_ATTRIBUTES
+                        }
+
+                        features_by_id[feature_id] = m.GenomeFeature(
+                            genome_id=genome_id,
+                            contig_name=contig_name,
+                            strand=rec.strand or ".",  # None/"." <=> unstranded
+                            feature_id=feature_id,
+                            feature_name=feature_name,
+                            feature_type=feature_type,
+                            source=rec.source,
+                            entries=[entry],
+                            gene_id=record_attributes.get(GFF_GENCODE_GENE_ID_ATTR, (None,))[0],
+                            attributes=attributes,
+                            parents=tuple(p for p in record_attributes.get(GFF_PARENT_ATTR, ()) if p),
+                        )
+
+                except Exception as e:
+                    logger.error(
+                        f"Could not process feature {i}: {feature_type=}, {feature_raw_attributes=}; encountered "
+                        f"exception: {e}"
+                    )
+                    logger.error(traceback.format_exc())
+
+                total_processed += 1
+                if total_processed % GFF_LOG_PROGRESS_INTERVAL == 0:
+                    logger.info(f"Processed {total_processed} features")
+
+            yield tuple(features_by_id.values())
+            features_by_id.clear()
+
+    finally:
+        gff.close()
+
+
 async def ingest_features(
     # parameters:
     genome_id: str,
@@ -134,96 +232,7 @@ async def ingest_features(
 
     logger.info(f"Ingesting gene features for genome {genome_id}...")
 
-    def _iter_features() -> Generator[tuple[m.GenomeFeature, ...], None, None]:
-        gff = pysam.TabixFile(str(gff_path), index=str(gff_index_path))
-        total_processed: int = 0
-
-        try:
-            features_by_id: dict[str, m.GenomeFeature] = {}
-
-            for contig in genome.contigs:
-                logger.info(f"Indexing features from contig {contig.name}")
-
-                try:
-                    fetch_iter = gff.fetch(contig.name, parser=pysam.asGFF3())
-                except ValueError as e:
-                    logger.warning(f"Could not find contig with name {contig.name} in GFF3; skipping... ({e})")
-                    continue
-
-                for i, record in enumerate(fetch_iter):
-                    feature_type = record.feature
-
-                    if feature_type in GFF_SKIPPED_FEATURE_TYPES:
-                        continue  # Don't ingest stop_codon_redefined_as_selenocysteine annotations
-
-                    # for some reason, dict(...) returns the attributes dict:
-                    feature_raw_attributes = dict(record)
-
-                    try:
-                        record_attributes = parse_attributes(feature_raw_attributes)
-                        feature_id = extract_feature_id(record, record_attributes)
-                        feature_name = extract_feature_name(record, record_attributes)
-
-                        if feature_id is None:
-                            logger.warning(
-                                f"Skipping unsupported feature {i}: type={feature_type}, no ID retrieval; {record}"
-                            )
-                            continue
-
-                        if feature_name is None:
-                            logger.warning(f"Using ID as name for feature {i}: {record}")
-                            feature_name = feature_id
-
-                        entry = m.GenomeFeatureEntry(
-                            start_pos=record.start,
-                            end_pos=record.end,
-                            score=record.score,
-                            phase=record.frame,  # misnamed in PySAM's GFF3 parser
-                        )
-
-                        if feature_id in features_by_id:
-                            features_by_id[feature_id].entries.append(entry)
-                        else:
-                            attributes: dict[str, list[str]] = {
-                                # skip attributes which have been captured in the above information:
-                                k: vs
-                                for k, vs in record_attributes.items()
-                                if k not in GFF_CAPTURED_ATTRIBUTES
-                            }
-
-                            features_by_id[feature_id] = m.GenomeFeature(
-                                genome_id=genome_id,
-                                contig_name=contig.name,
-                                strand=record.strand or ".",  # None/"." <=> unstranded
-                                feature_id=feature_id,
-                                feature_name=feature_name,
-                                feature_type=feature_type,
-                                source=record.source,
-                                entries=[entry],
-                                gene_id=record_attributes.get(GFF_GENCODE_GENE_ID_ATTR, (None,))[0],
-                                attributes=attributes,
-                                parents=tuple(p for p in record_attributes.get(GFF_PARENT_ATTR, ()) if p),
-                            )
-
-                    except Exception as e:
-                        logger.error(
-                            f"Could not process feature {i}: {feature_type=}, {feature_raw_attributes=}; encountered "
-                            f"exception: {e}"
-                        )
-                        logger.error(traceback.format_exc())
-
-                    total_processed += 1
-                    if total_processed % GFF_LOG_PROGRESS_INTERVAL == 0:
-                        logger.info(f"Processed {total_processed} features")
-
-                yield tuple(features_by_id.values())
-                features_by_id.clear()
-
-        finally:
-            gff.close()
-
-    features_to_ingest = _iter_features()
-
+    features_to_ingest = iter_features(genome, gff_path, gff_index_path, logger)
     n_ingested: int = 0
 
     # take features in contig batches

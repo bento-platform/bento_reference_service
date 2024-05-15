@@ -185,7 +185,7 @@ async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses,
 
 
 def _file_uri_to_path(uri: str) -> str:
-    return uri.replace("file://", "")
+    return uri.removeprefix("file://")
 
 
 def _put_genome_features(test_client: TestClient, genome: Genome) -> Response:
@@ -246,10 +246,6 @@ async def test_genome_feature_ingest(
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
     _test_ingest_genome_features(test_client, genome, expected_features)
 
-    sr = test_client.get(f"/genomes/{genome.id}/feature_types")
-    srd = sr.json()
-    assert sum(srd.values()) == expected_features
-
     # Test we can delete
     res = test_client.delete(f"/genomes/{genome.id}/features", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT
@@ -261,3 +257,38 @@ async def test_genome_feature_ingest(
 
     res = test_client.delete(f"/genomes/{genome.id}/features", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT
+
+
+async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+    genome = TEST_GENOME_SARS_COV_2_OBJ
+    expected_features = 49
+
+    # setup: create genome
+    create_genome_with_permissions(test_client, aioresponse, genome.model_dump(mode="json"))
+
+    # setup: ingest features
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
+    _test_ingest_genome_features(test_client, genome, expected_features)
+
+    # Test we can query genome features
+    sr = test_client.get(f"/genomes/{genome.id}/feature_types")
+    srd = sr.json()
+    assert sum(srd.values()) == expected_features
+
+    # Test we can query genome features
+    sr = test_client.get(f"/genomes/{genome.id}/features", params={"q": "ENSSASP00005000003"})
+    srd = sr.json()
+    assert len(srd["results"]) == 1
+    assert srd["pagination"]["total"] == 1
+
+    # Test we can list genome features - we get back the first 10
+    sr = test_client.get(f"/genomes/{genome.id}/features")
+    srd = sr.json()
+    assert len(srd["results"]) == 10
+    assert srd["pagination"]["offset"] == 0
+    assert srd["pagination"]["total"] == 10
+
+    # Test we can get a feature by ID
+    sr = test_client.get(f"/genomes/{genome.id}/features/CDS:ENSSASP00005000003")
+    assert sr.status_code == 200
+    assert sr.json()["feature_id"] == "CDS:ENSSASP00005000003"

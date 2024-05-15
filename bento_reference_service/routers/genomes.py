@@ -169,9 +169,12 @@ async def genomes_detail_features(
     offset: int = 0,
     limit: int = 10,
 ):
-    results, pagination = await db.query_genome_features(
-        genome_id, q, name, position, start, end, feature_type, offset, limit
-    )
+    if q:
+        results, pagination = await db.query_genome_features(genome_id, q, offset, limit)
+    else:
+        results, pagination = await db.filter_genome_features(
+            genome_id, name, position, start, end, feature_type, offset, limit
+        )
 
     return {
         "results": results,

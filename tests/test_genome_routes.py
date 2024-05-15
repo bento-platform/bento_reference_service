@@ -246,6 +246,10 @@ async def test_genome_feature_ingest(
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
     _test_ingest_genome_features(test_client, genome, expected_features)
 
+    sr = test_client.get(f"/genomes/{genome.id}/feature_types")
+    srd = sr.json()
+    assert sum(srd.values()) == expected_features
+
     # Test we can delete
     res = test_client.delete(f"/genomes/{genome.id}/features", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT

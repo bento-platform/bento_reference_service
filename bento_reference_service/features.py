@@ -132,7 +132,7 @@ def iter_features(
             logger.info(f"Indexing features from contig {contig_name}")
 
             try:
-                fetch_iter = gff.fetch(contig.name, parser=pysam.asGFF3())
+                fetch_iter = gff.fetch(reference=contig.name, parser=pysam.asGFF3())
             except ValueError as e:
                 logger.warning(f"Could not find contig with name {contig_name} in GFF3; skipping... ({e})")
                 continue
@@ -159,8 +159,19 @@ def iter_features(
                         logger.warning(f"Using ID as name for feature {i}: {rec}")
                         feature_name = feature_id
 
-                    # 'phase' is misnamed / legacy-named as 'frame' in PySAM's GFF3 parser:
-                    entry = m.GenomeFeatureEntry(start_pos=rec.start, end_pos=rec.end, score=rec.score, phase=rec.frame)
+                    # - coordinates from PySAM are 0-based, semi-open
+                    #    - to convert to 1-based semi-open coordinates like in the original GFF3, we add 1 to start
+                    #      (we should have to add 1 to end too, but the GFF3 parser is busted in PySAM I guess, so we
+                    #       leave it as-is)
+                    start_pos = rec.start + 1
+                    end_pos = rec.end
+                    entry = m.GenomeFeatureEntry(
+                        start_pos=start_pos,
+                        end_pos=end_pos,
+                        score=rec.score,
+                        # - 'phase' is misnamed / legacy-named as 'frame' in PySAM's GFF3 parser
+                        phase=rec.frame,
+                    )
 
                     if feature_id in features_by_id:
                         features_by_id[feature_id].entries.append(entry)

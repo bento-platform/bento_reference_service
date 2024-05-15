@@ -54,7 +54,7 @@ def extract_feature_id(record, attributes: dict[str, list[str]]) -> str | None:
     feature_type = record.feature.lower()
     feature_id = attributes.get(GFF_ID_ATTR, (None,))[0]
 
-    if feature_id:
+    if feature_id:  # If the standardized GFF `ID` attribute is set, we can use it and skip any deriving logic.
         return feature_id
 
     match feature_type:
@@ -77,7 +77,7 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
     feature_type = record.feature.lower()
     feature_name: str | None = attributes.get(GFF_NAME_ATTR, (None,))[0]
 
-    if feature_name:
+    if feature_name:  # If the standardized GFF `Name` attribute is set, we can use it and skip any deriving logic.
         return feature_name
 
     transcript_name = attributes.get("transcript_name", attributes.get("transcript_id", (None,)))[0]
@@ -236,8 +236,9 @@ async def ingest_features(
     n_ingested: int = 0
 
     # take features in contig batches
+    #  - these contig batches are created by the generator produced iter_features(...)
     #  - we use contigs as batches rather than a fixed batch size so that we are guaranteed to get parents alongside
-    #    their child features in the same batch.
+    #    their child features in the same batch, so we can assign surrogate keys correctly.
     while data := next(features_to_ingest, ()):
         s = datetime.now()
         logger.debug(f"ingest_gene_feature_annotation: ingesting batch of {len(data)} features")
@@ -256,6 +257,8 @@ async def ingest_features(
 async def ingest_features_task(
     genome_id: str, gff3_gz_path: Path, gff3_gz_tbi_path: Path, task_id: int, db: Database, logger: logging.Logger
 ):
+    # the ingest_features task moves from queued -> running -> (success | error)
+
     await db.update_task_status(task_id, "running")
 
     # clear existing gene features for this genome

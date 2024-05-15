@@ -167,7 +167,8 @@ class Database(PgAsyncDatabase):
                     ) aliases
                 FROM genome_contigs gc
                 WHERE md5_checksum = $1 OR ga4gh_checksum = $1
-                """, chk_norm
+                """,
+                chk_norm,
             )
 
         genome_res = (await anext(self._select_genomes(contig_res["genome_id"], False), None)) if contig_res else None

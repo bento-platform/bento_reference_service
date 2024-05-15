@@ -74,20 +74,20 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
         case "transcript":
             return transcript_name
         case "5utr" | "five_prime_utr":  # 5' untranslated region (UTR)
-            return f"{transcript_name} 5' UTR"
+            return f"{transcript_name} 5' UTR" if transcript_name else None
         case "3utr" | "three_prime_utr":  # 3' untranslated region (UTR)
-            return f"{transcript_name} 3' UTR"
+            return f"{transcript_name} 3' UTR" if transcript_name else None
         case "start_codon":
-            return f"{transcript_name} start codon"
+            return f"{transcript_name} start codon" if transcript_name else None
         case "stop_codon":
-            return f"{transcript_name} stop codon"
+            return f"{transcript_name} stop codon" if transcript_name else None
         case "exon":
-            if "exon_id" in attributes:
-                return attributes["exon_id"][0]
-            else:
-                return attributes["ID"][0]
+            exon_number = attributes.get("exon_number", (None,))[0]
+            if transcript_name is None or exon_number is None:
+                return None
+            return f"{transcript_name} exon {exon_number}"
         case "cds":  # coding sequence
-            return f"{transcript_name} CDS"
+            return f"{transcript_name} CDS" if transcript_name else None
         case _:
             return None
 

@@ -281,6 +281,12 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
     assert len(srd["results"]) == 1
     assert srd["pagination"]["total"] == 1
 
+    # Test we can filter genome features (ID used as name)
+    sr = test_client.get(f"/genomes/{genome.id}/features", params={"name": "CDS:ENSSASP00005000003"})
+    srd = sr.json()
+    assert len(srd["results"]) == 1
+    assert srd["pagination"]["total"] == 1
+
     # Test we can list genome features - we get back the first 10
     sr = test_client.get(f"/genomes/{genome.id}/features")
     srd = sr.json()

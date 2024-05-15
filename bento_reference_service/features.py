@@ -37,11 +37,20 @@ class AnnotationIngestError(Exception):
 
 
 def parse_attributes(raw_attributes: dict[str, str]) -> dict[str, list[str]]:
+    """
+    Parse the raw GFF3 attribute dictionary into a properly list-ified dictionary - every attribute in GFF3 except a few
+    standard ones can be lists (although most are not, in reality.)
+    """
+
     # See "attributes" in http://gmod.org/wiki/GFF3
     return {k: [url_unquote(e) for e in str(v).split(",") if e] for k, v in raw_attributes.items()}
 
 
 def extract_feature_id(record, attributes: dict[str, list[str]]) -> str | None:
+    """
+    Given a GFF3 record and an extracted dictionary of attributes, extract a natural-key ID for the feature.
+    """
+
     feature_type = record.feature.lower()
     feature_id = attributes.get(GFF_ID_ATTR, (None,))[0]
 
@@ -60,6 +69,11 @@ def extract_feature_id(record, attributes: dict[str, list[str]]) -> str | None:
 
 
 def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None:
+    """
+    Given a GFF3 record and an extracted dictionary of attributes, either extract or infer a (not necessarily unique)
+    name for the feature.
+    """
+
     feature_type = record.feature.lower()
     feature_name: str | None = attributes.get(GFF_NAME_ATTR, (None,))[0]
 

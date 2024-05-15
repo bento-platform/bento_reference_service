@@ -84,7 +84,7 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
 
     match feature_type:
         case "gene":
-            return attributes.get("gene_name", attributes.get(GFF_GENCODE_GENE_ID_ATTR, (None,)))[0]
+            return attributes.get("gene_name", (None,))[0]
         case "transcript":
             return transcript_name
         case "5utr" | "five_prime_utr":  # 5' untranslated region (UTR)

@@ -45,12 +45,18 @@ class Database(PgAsyncDatabase):
     def deserialize_contig(self, rec: asyncpg.Record | dict) -> ContigWithRefgetURI:
         service_base_url = self._config.service_url_base_path.rstrip("/")
         refget_uri_base = f"{service_base_url}/sequence"
+
         md5 = rec["md5_checksum"]
         ga4gh = rec["ga4gh_checksum"]
+
+        aliases = rec["aliases"]
+        if isinstance(aliases, str):
+            aliases = json.loads(aliases)
+
         return ContigWithRefgetURI(
             name=rec["contig_name"],
             # aliases is [None] if no aliases defined:
-            aliases=tuple(map(Database.deserialize_alias, rec["aliases"])) if rec["aliases"] else (),
+            aliases=tuple(map(Database.deserialize_alias, aliases)) if aliases else (),
             md5=md5,
             ga4gh=ga4gh,
             length=rec["contig_length"],
@@ -144,12 +150,24 @@ class Database(PgAsyncDatabase):
     async def get_genome_and_contig_by_checksum_str(
         self, checksum_str: str
     ) -> tuple[GenomeWithURIs, ContigWithRefgetURI] | None:
-        chk_norm: str = checksum_str.rstrip("ga4gh:").rstrip("md5:")  # strip optional checksum prefixes if present
+        # strip optional checksum prefixes if present:
+        chk_norm: str = checksum_str.removeprefix("ga4gh:").removeprefix("md5:")
+
         conn: asyncpg.Connection
         async with self.connect() as conn:
             # TODO: these SQL statements could be optimized into one for performance reasons if it becomes necessary
             contig_res = await conn.fetchrow(
-                "SELECT * FROM genome_contigs WHERE md5_checksum = $1 OR ga4gh_checksum = $1", chk_norm
+                """
+                SELECT
+                    genome_id, contig_name, contig_length, circular, md5_checksum, ga4gh_checksum,
+                    (
+                        SELECT jsonb_agg(gca.*)
+                        FROM genome_contig_aliases gca
+                        WHERE gc.genome_id = gca.genome_id AND gc.contig_name = gca.contig_name
+                    ) aliases
+                FROM genome_contigs gc
+                WHERE md5_checksum = $1 OR ga4gh_checksum = $1
+                """, chk_norm
             )
 
         genome_res = (await anext(self._select_genomes(contig_res["genome_id"], False), None)) if contig_res else None

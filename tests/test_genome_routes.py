@@ -17,13 +17,13 @@ from .shared_data import (
     TEST_GENOME_SARS_COV_2_OBJ,
     TEST_GENOME_HG38_CHR1_F100K,
     TEST_GENOME_HG38_CHR1_F100K_OBJ,
+    AUTHORIZATION_HEADER,
 )
+from .shared_functions import create_genome_with_permissions
 
 # all tests are async so that db_cleanup (an async fixture) properly works. not sure why it's this way.
 
 pytestmark = pytest.mark.asyncio()
-
-AUTHORIZATION_HEADER = {"Authorization": "Token bearer"}
 
 
 async def test_genome_list(test_client: TestClient):
@@ -51,12 +51,6 @@ async def test_404s_with_no_genomes(test_client: TestClient):
 
     res = test_client.get("/genomes/hg19.fa.fai")
     assert res.status_code == status.HTTP_404_NOT_FOUND
-
-
-def create_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses, genome: dict) -> Response:
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
-    res = test_client.post("/genomes", json=genome, headers=AUTHORIZATION_HEADER)
-    return res
 
 
 def create_covid_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:

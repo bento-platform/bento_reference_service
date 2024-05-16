@@ -13,6 +13,7 @@ __all__ = [
     "HG38_CHR1_F100K_GENOME_ID",
     "TEST_GENOME_HG38_CHR1_F100K",
     "TEST_GENOME_HG38_CHR1_F100K_OBJ",
+    "AUTHORIZATION_HEADER",
 ]
 
 DATA_DIR = (pathlib.Path(__file__).parent / "data").absolute()
@@ -70,3 +71,5 @@ TEST_GENOME_HG38_CHR1_F100K = {
     ],
 }
 TEST_GENOME_HG38_CHR1_F100K_OBJ = Genome(**TEST_GENOME_HG38_CHR1_F100K)
+
+AUTHORIZATION_HEADER = {"Authorization": "Token bearer"}

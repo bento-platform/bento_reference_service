@@ -618,7 +618,8 @@ class Database(PgAsyncDatabase):
 
                 new_attribute_values: list[tuple[int, str]] = [(iv, sv) for sv, iv in new_attr_value_ids.items()]
                 self.logger.debug(
-                    f"bulk_ingest_genome_features: have {len(new_attribute_keys)} feature attribute values for batch"
+                    f"bulk_ingest_genome_features: have {len(new_attribute_values)} new feature attribute values for "
+                    f"batch"
                 )
                 await conn.copy_records_to_table(
                     "genome_feature_attribute_values", columns=["id", "attr_val"], records=new_attribute_values

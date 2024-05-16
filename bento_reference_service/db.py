@@ -343,7 +343,7 @@ class Database(PgAsyncDatabase):
         self, id_query: str, g_id: str, offset: int, limit: int, *args
     ) -> tuple[list[GenomeFeature], dict]:  # results, pagination dict
         offset = max(offset, 0)
-        limit = max(limit, 0)
+        limit = min(max(limit, 0), self._config.feature_response_record_limit)
 
         conn: asyncpg.Connection
         async with self.connect() as conn:

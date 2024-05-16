@@ -26,6 +26,8 @@ class Config(BentoBaseConfig):
     file_response_chunk_size: int = 1024 * 16  # 16 KiB at a time
     response_substring_limit: int = 10000  # TODO: Refine default
 
+    feature_response_record_limit: int = 1000
+
 
 @lru_cache()
 def get_config():

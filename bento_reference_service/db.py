@@ -31,13 +31,6 @@ class Database(PgAsyncDatabase):
         self.logger: logging.Logger = logger
         super().__init__(config.database_uri, SCHEMA_PATH)
 
-    async def initialize(self, pool_size: int = 10):
-        await super().initialize(pool_size)
-
-        # If we have any tasks that are still marked as "running" on application startup, we need to move them to the
-        # error state.
-        await self.move_running_tasks_to_error()
-
     @staticmethod
     def deserialize_alias(rec: asyncpg.Record | dict) -> Alias:
         return Alias(alias=rec["alias"], naming_authority=rec["naming_authority"])

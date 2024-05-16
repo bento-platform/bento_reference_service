@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError, StarletteHTTPException
@@ -12,11 +13,27 @@ from . import __version__
 from .authz import authz_middleware
 from .config import get_config, ConfigDependency
 from .constants import BENTO_SERVICE_KIND, SERVICE_TYPE
+from .db import get_db
 from .logger import get_logger, LoggerDependency
 from .routers.genomes import genome_router
 from .routers.refget import refget_router
 from .routers.tasks import task_router
 from .routers.workflows import workflow_router
+
+
+# TODO: Find a way to DI this
+config_for_setup = get_config()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    db = get_db(config_for_setup, get_logger(config_for_setup))
+
+    # If we have any tasks that are still marked as "running" on application startup, we need to move them to the error
+    # state.
+    await db.move_running_tasks_to_error()
+
+    yield
 
 
 app = FastAPI()
@@ -30,9 +47,6 @@ app.include_router(genome_router)
 app.include_router(task_router)
 app.include_router(refget_router)
 app.include_router(workflow_router)
-
-# TODO: Find a way to DI this
-config_for_setup = get_config()
 
 app.add_middleware(
     CORSMiddleware,

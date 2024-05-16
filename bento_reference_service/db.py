@@ -346,41 +346,12 @@ class Database(PgAsyncDatabase):
         return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}
 
     async def query_genome_features(
-        self, g_id: str, q: str, offset: int = 0, limit: int = 10
-    ) -> tuple[list[GenomeFeature], dict]:  # results, pagination dict:
-        id_query = f"""
-        SELECT feature_id FROM (
-            SELECT 
-                feature_id,
-                feature_name,
-                feature_type,
-                ({self._feature_inner_entries_query(None, "gf_tmp")}) entries,
-                (
-                    SELECT array_agg(gfav.attr_val) 
-                    FROM genome_feature_attributes gfa 
-                        JOIN genome_feature_attribute_keys gfak ON gfa.attr_key = gfak.id
-                        JOIN genome_feature_attribute_values gfav ON gfa.attr_val = gfav.id
-                    WHERE gfa.feature = gf_tmp.id AND gfav.attr_val ~ $4
-                ) attributes
-            FROM genome_features gf_tmp
-            WHERE 
-                gf_tmp.genome_id = $1
-        ) gf
-        WHERE 
-            array_length(gf.attributes, 1) > 0 
-            OR gf.feature_id ~ $4
-            OR gf.feature_name ~ $4
-        OFFSET $2
-        LIMIT  $3
-        """
-
-        return await self._run_feature_id_query(id_query, g_id, offset, limit, q)
-
-    async def filter_genome_features(
         self,
         g_id: str,
         /,
+        q: str | None = None,
         name: str | None = None,
+        name_q: str | None = None,
         position: str | None = None,
         start: int | None = None,
         end: int | None = None,
@@ -398,8 +369,41 @@ class Database(PgAsyncDatabase):
             q_params.append(pv)
             return f"${len(q_params) + 3}"  # plus 3: g_id, offset, limit at start
 
+        if q:
+            query_param = _q_param(q)
+            gf_where_items.append(
+                f"""
+                gf.feature_id IN (
+                    SELECT feature_id FROM (
+                        SELECT 
+                            feature_id,
+                            feature_name,
+                            feature_type,
+                            ({self._feature_inner_entries_query(None, "gf_tmp_1")}) entries,
+                            (
+                                SELECT array_agg(gfav.attr_val) 
+                                FROM genome_feature_attributes gfa 
+                                    JOIN genome_feature_attribute_keys gfak ON gfa.attr_key = gfak.id
+                                    JOIN genome_feature_attribute_values gfav ON gfa.attr_val = gfav.id
+                                WHERE gfa.feature = gf_tmp_1.id AND gfav.attr_val ~ {query_param}
+                            ) attributes
+                        FROM genome_features gf_tmp_1
+                        WHERE 
+                            gf_tmp_1.genome_id = $1
+                    ) gf_tmp_2
+                    WHERE 
+                        array_length(gf_tmp_2.attributes, 1) > 0 
+                        OR gf_tmp_2.feature_id ~ {query_param}
+                        OR gf_tmp_2.feature_name ~ {query_param}
+                )
+            """
+            )
+
         if name:
             gf_where_items.append(f"gf.feature_name = {_q_param(name)}")
+
+        if name_q:
+            gf_where_items.append(f"gf.feature_name ~ {_q_param(name_q)}")
 
         if position:
             gfe_where_items.append(f"gfe.position_text ~ {_q_param(position)}")
@@ -437,7 +441,15 @@ class Database(PgAsyncDatabase):
         LIMIT  $3
         """
 
-        return await self._run_feature_id_query(id_query, g_id, offset, limit, *q_params)
+        offset = max(offset, 0)
+        limit = min(max(limit, 0), self._config.feature_response_record_limit)
+
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            id_res = await conn.fetch(id_query, g_id, offset, limit, *q_params)
+            final_list = await self.get_genome_features_by_ids(g_id, [r["feature_id"] for r in id_res], conn)
+
+        return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}
 
     async def clear_genome_features(self, g_id: str):
         conn: asyncpg.Connection

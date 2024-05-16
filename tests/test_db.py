@@ -108,11 +108,15 @@ async def test_genome_features_summary(db: Database, db_cleanup):
 
 
 @pytest.mark.parametrize(
-    "genome_id,filters,n_results",
+    "genome_id,args,n_results",
     [
         # SARS-CoV-2
         (SARS_COV_2_GENOME_ID, dict(name="ORF1ab"), 3),  # should get back 2 genes and 1 transcript
+        (SARS_COV_2_GENOME_ID, dict(name_q="ORF1"), 6),  # ORF1ab, ORF1a, ORF10
         (SARS_COV_2_GENOME_ID, dict(start=1, end=1000), 9),  # region + 8 related to ORF1ab
+        (SARS_COV_2_GENOME_ID, dict(q="ORF1ab"), 3),
+        (SARS_COV_2_GENOME_ID, dict(q="ENSSASG00005000002"), 1),
+        (SARS_COV_2_GENOME_ID, dict(q="protein_coding", limit=100), 24),
         # hg38 subset
         (HG38_CHR1_F100K_GENOME_ID, dict(position="chr1:11869-"), 3),
         (HG38_CHR1_F100K_GENOME_ID, dict(start=12000), 10),
@@ -123,29 +127,8 @@ async def test_genome_features_summary(db: Database, db_cleanup):
         (HG38_CHR1_F100K_GENOME_ID, dict(limit=20), 13),
     ],
 )
-async def test_filter_genome_features(db: Database, db_cleanup, genome_id: str, filters: dict, n_results: int):
+async def test_query_genome_features(db: Database, db_cleanup, genome_id: str, args: dict, n_results: int):
     await (GENOME_ID_TO_SET_UP_FN[genome_id])(db, logging.getLogger(__name__))
-    res, page = await db.filter_genome_features(genome_id, **filters)
+    res, page = await db.query_genome_features(genome_id, **args)
     assert len(res) == n_results
     assert page["total"] == n_results
-
-
-async def test_query_genome_features(db: Database, db_cleanup):
-    logger = logging.getLogger(__name__)
-    await _set_up_sars_cov_2_genome_and_features(db, logger)
-
-    # - should get back 2 genes and 1 transcript
-    res, page = await db.query_genome_features(SARS_COV_2_GENOME_ID, q="ORF1ab")
-    assert len(res) == 3
-    assert page["total"] == 3
-
-    # - filter by q - should get back 1 gene
-    res, page = await db.query_genome_features(SARS_COV_2_GENOME_ID, q="ENSSASG00005000002")
-    assert len(res) == 1
-    assert page["total"] == 1
-    assert res[0].feature_id == "gene:ENSSASG00005000002"
-
-    # - query by attribute value
-    res, page = await db.query_genome_features(SARS_COV_2_GENOME_ID, q="protein_coding", limit=100)  # protein_coding
-    assert len(res) == 24
-    assert page["total"] == 24

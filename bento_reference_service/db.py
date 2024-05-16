@@ -682,7 +682,7 @@ class Database(PgAsyncDatabase):
 
             where_part = " AND ".join(where_clauses) if where_clauses else "true"
 
-            res = await conn.fetch(f"SELECT * FROM tasks WHERE genome_id = $1 {where_part}", *params)
+            res = await conn.fetch(f"SELECT * FROM tasks WHERE {where_part}", *params)
         return tuple(self.deserialize_task(r) for r in res)
 
     async def update_task_status(self, t_id: int, status: TaskStatus, message: str = ""):

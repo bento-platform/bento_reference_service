@@ -332,19 +332,6 @@ class Database(PgAsyncDatabase):
         res = await self.get_genome_features_by_ids(g_id, [f_id])
         return res[0] if res else None
 
-    async def _run_feature_id_query(
-        self, id_query: str, g_id: str, offset: int, limit: int, *args
-    ) -> tuple[list[GenomeFeature], dict]:  # results, pagination dict
-        offset = max(offset, 0)
-        limit = min(max(limit, 0), self._config.feature_response_record_limit)
-
-        conn: asyncpg.Connection
-        async with self.connect() as conn:
-            id_res = await conn.fetch(id_query, g_id, offset, limit, *args)
-            final_list = await self.get_genome_features_by_ids(g_id, [r["feature_id"] for r in id_res], conn)
-
-        return final_list, {"offset": offset, "limit": limit, "total": len(id_res)}
-
     async def query_genome_features(
         self,
         g_id: str,

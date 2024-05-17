@@ -32,11 +32,12 @@ async def lifespan(_app: FastAPI):
     # If we have any tasks that are still marked as "running" on application startup, we need to move them to the error
     # state.
     await db.move_running_tasks_to_error()
+    await db.close()
 
     yield
 
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 # Attach different routers to the app, for:
 # - genome listing

@@ -31,3 +31,12 @@ async def test_task_routes(test_client: TestClient, aioresponse: aioresponses, d
     assert len(rd) == 1
     assert rd[0]["genome_id"] == SARS_COV_2_GENOME_ID
     assert rd[0]["status"] == "queued"
+
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    res = test_client.get(f"/tasks/{rd[0]['id']}", headers=AUTHORIZATION_HEADER)
+    rd2 = res.json()
+    assert rd[0] == rd2
+
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    res = test_client.get(f"/tasks/0", headers=AUTHORIZATION_HEADER)
+    assert res.status_code == 404

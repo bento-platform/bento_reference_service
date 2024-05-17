@@ -274,6 +274,8 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
     srd = sr.json()
     assert len(srd["results"]) == 1
     assert srd["pagination"]["total"] == 1
+    assert isinstance(srd.get("time"), float)
+    assert srd["time"] < 0.2  # this is a very basic operation on a small dataset and should be fast.
 
     # Test we can filter genome features (ID used as name)
     sr = test_client.get(f"/genomes/{genome.id}/features", params={"name": "CDS:ENSSASP00005000003"})

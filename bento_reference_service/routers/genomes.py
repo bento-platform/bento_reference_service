@@ -2,6 +2,7 @@ import aiofiles
 import asyncpg
 import traceback
 
+from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from typing import Annotated
@@ -170,6 +171,8 @@ async def genomes_detail_features(
     offset: int = 0,
     limit: int = 10,
 ):
+    st = datetime.now()
+
     results, pagination = await db.query_genome_features(
         genome_id, q, name, name_q, position, start, end, feature_type, offset, limit
     )
@@ -177,6 +180,7 @@ async def genomes_detail_features(
     return {
         "results": results,
         "pagination": pagination,
+        "time": (datetime.now() - st).total_seconds(),
     }
 
 

@@ -148,16 +148,6 @@ def iter_features(
 
                 try:
                     record_attributes = parse_attributes(feature_raw_attributes)
-                    feature_id = extract_feature_id(rec, record_attributes)
-                    feature_name = extract_feature_name(rec, record_attributes)
-
-                    if feature_id is None:
-                        logger.warning(f"Skipping unsupported feature {i}: type={feature_type}, no ID retrieval; {rec}")
-                        continue
-
-                    if feature_name is None:
-                        logger.warning(f"Using ID as name for feature {i}: {rec}")
-                        feature_name = feature_id
 
                     # - coordinates from PySAM are 0-based, semi-open
                     #    - to convert to 1-based semi-open coordinates like in the original GFF3, we add 1 to start
@@ -165,6 +155,22 @@ def iter_features(
                     #       leave it as-is)
                     start_pos = rec.start + 1
                     end_pos = rec.end
+
+                    feature_id = extract_feature_id(rec, record_attributes)
+                    if feature_id is None:
+                        logger.warning(
+                            f"Skipping unsupported feature {i}: type={feature_type}, no ID retrieval; "
+                            f"{contig_name}:{start_pos}-{end_pos}"
+                        )
+                        continue
+
+                    feature_name = extract_feature_name(rec, record_attributes)
+                    if feature_name is None:
+                        logger.warning(
+                            f"Using ID as name for feature {i}: {feature_id} {contig_name}:{start_pos}-{end_pos}"
+                        )
+                        feature_name = feature_id
+
                     entry = m.GenomeFeatureEntry(
                         start_pos=start_pos,
                         end_pos=end_pos,

@@ -310,12 +310,10 @@ class Database(PgAsyncDatabase):
             ) parents,
             (
                 WITH attrs_tmp AS (
-                    SELECT gfak.attr_key AS attr_key, array_agg(gfav.attr_val) attr_vals 
-                    FROM genome_feature_attributes gfa 
-                        JOIN genome_feature_attribute_keys gfak ON gfa.attr_key = gfak.id
-                        JOIN genome_feature_attribute_values gfav ON gfa.attr_val = gfav.id
-                    WHERE gfa.feature = gf.id
-                    GROUP BY gfak.attr_key
+                    SELECT gfav.attr_key, array_agg(attr_val) attr_vals 
+                    FROM genome_feature_attributes_view gfav
+                    WHERE gfav.feature = gf.id
+                    GROUP BY gfav.attr_key
                 )
                 SELECT jsonb_object_agg(attrs_tmp.attr_key, attrs_tmp.attr_vals) FROM attrs_tmp
             ) attributes
@@ -337,8 +335,9 @@ class Database(PgAsyncDatabase):
         g_id: str,
         /,
         q: str | None = None,
+        q_fzy: bool = False,
         name: str | None = None,
-        name_q: str | None = None,
+        name_fzy: bool = False,
         position: str | None = None,
         start: int | None = None,
         end: int | None = None,
@@ -348,7 +347,9 @@ class Database(PgAsyncDatabase):
     ) -> tuple[list[GenomeFeature], dict]:  # list of genome features + pagination dict object
         # TODO: refactor to use standard Bento search in the future, when Bento search makes more sense
 
+        gf_select_items: list[str] = []
         gf_where_items: list[str] = []
+        gf_order_items: list[str] = []
         gfe_where_items: list[str] = []
         q_params: list[str | int] = []
 
@@ -358,6 +359,7 @@ class Database(PgAsyncDatabase):
 
         if q:
             query_param = _q_param(q)
+            q_op = "%" if q_fzy else "~"
             gf_where_items.append(
                 f"""
                 gf.feature_id IN (
@@ -365,35 +367,33 @@ class Database(PgAsyncDatabase):
                         SELECT 
                             feature_id,
                             feature_name,
-                            feature_type,
-                            ({self._feature_inner_entries_query(None, "gf_tmp_1")}) entries,
-                            (
-                                SELECT array_agg(gfav.attr_val) 
-                                FROM genome_feature_attributes gfa 
-                                    JOIN genome_feature_attribute_keys gfak ON gfa.attr_key = gfak.id
-                                    JOIN genome_feature_attribute_values gfav ON gfa.attr_val = gfav.id
-                                WHERE gfa.feature = gf_tmp_1.id AND gfav.attr_val ~ {query_param}
-                            ) attributes
+                            feature_type
                         FROM genome_features gf_tmp_1
                         WHERE 
-                            gf_tmp_1.genome_id = $1
+                            gf_tmp_1.genome_id = $1 AND (
+                                gf_tmp_1.feature_id {q_op} {query_param}
+                                OR gf_tmp_1.feature_name {q_op} {query_param}
+                                OR EXISTS (
+                                    SELECT attr_val FROM genome_feature_attributes_view gfav 
+                                    WHERE gfav.feature = gf_tmp_1.id AND gfav.attr_val {q_op} {query_param}
+                                )
+                            )
                     ) gf_tmp_2
-                    WHERE 
-                        array_length(gf_tmp_2.attributes, 1) > 0 
-                        OR gf_tmp_2.feature_id ~ {query_param}
-                        OR gf_tmp_2.feature_name ~ {query_param}
                 )
             """
             )
 
         if name:
-            gf_where_items.append(f"gf.feature_name = {_q_param(name)}")
-
-        if name_q:
-            gf_where_items.append(f"gf.feature_name ~ {_q_param(name_q)}")
+            param = _q_param(name)
+            if name_fzy:
+                gf_select_items.append(f"similarity(gf.feature_name, {param}) gf_fn_sml")
+                gf_where_items.append(f"gf.feature_name % {param}")
+                gf_order_items.append("gf_fn_sml DESC")
+            else:
+                gf_where_items.append(f"gf.feature_name = {param}")
 
         if position:
-            gfe_where_items.append(f"gfe.position_text ~ {_q_param(position)}")
+            gfe_where_items.append(f"gfe.position_text ILIKE {_q_param(position + '%')}")
 
         if start is not None:
             gfe_where_items.append(f"gfe.start_pos >= {_q_param(start)}")
@@ -411,7 +411,7 @@ class Database(PgAsyncDatabase):
         gfe_where_clause = " AND ".join(gfe_where_items) if gfe_where_items else None
 
         id_query = f"""
-        SELECT feature_id FROM (
+        SELECT feature_id {", " + ", ".join(gf_select_items) if gf_select_items else ""} FROM (
             SELECT 
                 feature_id,
                 feature_name,
@@ -424,6 +424,7 @@ class Database(PgAsyncDatabase):
         WHERE 
             {"jsonb_array_length(gf.entries) > 0 AND" if gfe_where_clause else ""} 
             {where_clause}
+        {"ORDER BY " + ", ".join(gf_order_items) if gf_order_items else ""}
         OFFSET $2 
         LIMIT  $3
         """

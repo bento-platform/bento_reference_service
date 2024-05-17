@@ -112,11 +112,13 @@ async def test_genome_features_summary(db: Database, db_cleanup):
     [
         # SARS-CoV-2
         (SARS_COV_2_GENOME_ID, dict(name="ORF1ab"), 3),  # should get back 2 genes and 1 transcript
-        (SARS_COV_2_GENOME_ID, dict(name_q="ORF1"), 6),  # ORF1ab, ORF1a, ORF10
+        # ORF1ab, ORF1a, ORF10 should be top 6 results, but we get more back since it's fuzzy
+        # (ORF3a, ORF6, ORF7[a|b], ORF8):
+        (SARS_COV_2_GENOME_ID, dict(name="ORF1", name_fzy=True, limit=100), 16),
         (SARS_COV_2_GENOME_ID, dict(start=1, end=1000), 9),  # region + 8 related to ORF1ab
         (SARS_COV_2_GENOME_ID, dict(q="ORF1ab"), 3),
         (SARS_COV_2_GENOME_ID, dict(q="ENSSASG00005000002"), 1),
-        (SARS_COV_2_GENOME_ID, dict(q="protein_coding", limit=100), 24),
+        (SARS_COV_2_GENOME_ID, dict(q="protein_coding", q_fzy=True, limit=100), 24),
         # hg38 subset
         (HG38_CHR1_F100K_GENOME_ID, dict(position="chr1:11869-"), 3),
         (HG38_CHR1_F100K_GENOME_ID, dict(start=12000), 10),

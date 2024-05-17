@@ -162,8 +162,9 @@ async def genomes_detail_features(
     db: DatabaseDependency,
     genome_id: str,
     q: str | None = None,
+    q_fzy: bool = False,
     name: str | None = None,
-    name_q: str | None = None,
+    name_fzy: bool = False,
     position: str | None = None,
     start: int | None = None,
     end: int | None = None,
@@ -174,7 +175,7 @@ async def genomes_detail_features(
     st = datetime.now()
 
     results, pagination = await db.query_genome_features(
-        genome_id, q, name, name_q, position, start, end, feature_type, offset, limit
+        genome_id, q, q_fzy, name, name_fzy, position, start, end, feature_type, offset, limit
     )
 
     return {

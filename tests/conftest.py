@@ -41,6 +41,8 @@ async def db_cleanup(db: Database):
             DROP TYPE IF EXISTS task_kind;
             DROP TYPE IF EXISTS task_status;
             
+            DROP VIEW genome_feature_attributes_view;
+            
             DROP INDEX IF EXISTS genome_features_feature_id_trgm_gin;
             DROP INDEX IF EXISTS genome_features_feature_name_trgm_gin;
             DROP INDEX IF EXISTS genome_feature_entries_position_text_trgm_gin;

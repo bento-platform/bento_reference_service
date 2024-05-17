@@ -266,25 +266,37 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
 
     # Test we can query genome features
     sr = test_client.get(f"/genomes/{genome.id}/feature_types")
+    assert sr.status_code == 200
     srd = sr.json()
     assert sum(srd.values()) == expected_features
 
     # Test we can query genome features
+
+    #  - regular expression
     sr = test_client.get(f"/genomes/{genome.id}/features", params={"q": "ENSSASP00005000003"})
+    assert sr.status_code == 200
     srd = sr.json()
     assert len(srd["results"]) == 1
     assert srd["pagination"]["total"] == 1
     assert isinstance(srd.get("time"), float)
     assert srd["time"] < 0.2  # this is a very basic operation on a small dataset and should be fast.
 
+    #  - fuzzy search
+    sr = test_client.get(f"/genomes/{genome.id}/features", params={"q": "ENSSASP00005000003", "q_fzy": "true"})
+    assert sr.status_code == 200
+    srd = sr.json()
+    assert len(srd["results"]) == 10  # fuzzy search yields many results
+
     # Test we can filter genome features (ID used as name)
     sr = test_client.get(f"/genomes/{genome.id}/features", params={"name": "CDS:ENSSASP00005000003"})
+    assert sr.status_code == 200
     srd = sr.json()
     assert len(srd["results"]) == 1
     assert srd["pagination"]["total"] == 1
 
     # Test we can list genome features - we get back the first 10
     sr = test_client.get(f"/genomes/{genome.id}/features")
+    assert sr.status_code == 200
     srd = sr.json()
     assert len(srd["results"]) == 10
     assert srd["pagination"]["offset"] == 0

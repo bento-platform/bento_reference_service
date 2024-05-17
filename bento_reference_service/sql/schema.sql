@@ -152,6 +152,12 @@ CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_key_idx
 CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_val_idx
     ON genome_feature_attributes (feature, attr_val);
 
+CREATE OR REPLACE VIEW genome_feature_attributes_view AS
+    SELECT gfa.feature feature, gfak.attr_key attr_key, gfav.attr_val attr_val
+    FROM genome_feature_attributes gfa
+        JOIN genome_feature_attribute_keys gfak ON gfa.attr_key = gfak.id
+        JOIN genome_feature_attribute_values gfav ON gfa.attr_val = gfav.id;
+
 
 DO $$ BEGIN
     CREATE TYPE task_kind AS ENUM ('ingest_features');

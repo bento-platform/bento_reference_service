@@ -120,16 +120,14 @@ def iter_features(
 
     genome_id = genome.id
 
-    gff = pysam.TabixFile(str(gff_path), index=str(gff_index_path))
     total_processed: int = 0
 
-    try:
-        features_by_id: dict[str, m.GenomeFeature] = {}
-
+    with pysam.TabixFile(str(gff_path), index=str(gff_index_path)) as gff:
         for contig in genome.contigs:
             contig_name = contig.name
-
             logger.info(f"Indexing features from contig {contig_name}")
+
+            contig_features_by_id: dict[str, m.GenomeFeature] = {}
 
             try:
                 fetch_iter = gff.fetch(reference=contig.name, parser=pysam.asGFF3())
@@ -179,8 +177,8 @@ def iter_features(
                         phase=rec.frame,
                     )
 
-                    if feature_id in features_by_id:
-                        features_by_id[feature_id].entries.append(entry)
+                    if feature_id in contig_features_by_id:
+                        contig_features_by_id[feature_id].entries.append(entry)
                     else:
                         attributes: dict[str, list[str]] = {
                             # skip attributes which have been captured in the above information:
@@ -189,7 +187,7 @@ def iter_features(
                             if k not in GFF_CAPTURED_ATTRIBUTES
                         }
 
-                        features_by_id[feature_id] = m.GenomeFeature(
+                        contig_features_by_id[feature_id] = m.GenomeFeature(
                             genome_id=genome_id,
                             contig_name=contig_name,
                             strand=rec.strand or ".",  # None/"." <=> unstranded
@@ -214,11 +212,7 @@ def iter_features(
                 if total_processed % GFF_LOG_PROGRESS_INTERVAL == 0:
                     logger.info(f"Processed {total_processed} features")
 
-            yield tuple(features_by_id.values())
-            features_by_id.clear()
-
-    finally:
-        gff.close()
+            yield tuple(contig_features_by_id.values())
 
 
 async def ingest_features(

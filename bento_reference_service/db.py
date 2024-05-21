@@ -14,6 +14,7 @@ from .models import (
     ContigWithRefgetURI,
     Genome,
     GenomeWithURIs,
+    GenomeGFF3Patch,
     OntologyTerm,
     GenomeFeatureEntry,
     GenomeFeature,
@@ -234,6 +235,16 @@ class Database(PgAsyncDatabase):
         self.logger.debug(f"Created genome: {g}")
 
         return await self.get_genome(g.id, external_resource_uris=return_external_resource_uris)
+
+    async def update_genome(self, g_id: str, patch: GenomeGFF3Patch):
+        conn: asyncpg.Connection
+        async with self.connect() as conn:
+            await conn.execute(
+                "UPDATE genomes SET gff3_gz_uri = $2, gff3_gz_tbi_uri = $3 WHERE id = $1",
+                g_id,
+                patch.gff3_gz,
+                patch.gff3_gz_tbi,
+            )
 
     async def genome_feature_types_summary(self, g_id: str):
         conn: asyncpg.Connection

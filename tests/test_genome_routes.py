@@ -153,6 +153,45 @@ async def test_genome_detail_endpoints(test_client: TestClient, aioresponse: aio
         assert res.content == fh.read()
 
 
+async def test_genome_without_gff3_and_then_patch(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+    covid_genome_without_gff3 = {**TEST_GENOME_SARS_COV_2}
+    del covid_genome_without_gff3["gff3_gz"]
+    del covid_genome_without_gff3["gff3_gz_tbi"]
+
+    # ingest a genome without GFF3/TBI URIs (we'll add them in later)
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    res = test_client.post("/genomes", json=covid_genome_without_gff3, headers=AUTHORIZATION_HEADER)
+    assert res.status_code == status.HTTP_201_CREATED
+
+    # check that the genome ingested
+    res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}")
+    assert res.status_code == status.HTTP_200_OK
+
+    # check that we get 404s for the gff3 files, since we haven't ingested them yet
+    res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz")
+    assert res.status_code == status.HTTP_404_NOT_FOUND
+    res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz.tbi")
+    assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    # update the genome with GFF3/TBI URIs
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    res = test_client.patch(
+        f"/genomes/{SARS_COV_2_GENOME_ID}",
+        json={
+            "gff3_gz": TEST_GENOME_SARS_COV_2["gff3_gz"],
+            "gff3_gz_tbi": TEST_GENOME_SARS_COV_2["gff3_gz_tbi"],
+        },
+        headers=AUTHORIZATION_HEADER,
+    )
+    assert res.status_code == status.HTTP_204_NO_CONTENT
+
+    # check that we can now access the GFF3/TBI
+    res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz")
+    assert res.status_code == status.HTTP_200_OK
+    res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz.tbi")
+    assert res.status_code == status.HTTP_200_OK
+
+
 async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
     # setup: create genome  TODO: fixture
     create_covid_genome_with_permissions(test_client, aioresponse)
@@ -183,15 +222,11 @@ def _file_uri_to_path(uri: str) -> str:
 
 
 def _put_genome_features(test_client: TestClient, genome: Genome) -> Response:
-    gff3_gz = _file_uri_to_path(genome.gff3_gz)
-    gff3_gz_tbi = _file_uri_to_path(genome.gff3_gz_tbi)
-
-    with open(gff3_gz, "rb") as gff3_fh, open(gff3_gz_tbi, "rb") as tbi_fh:
-        return test_client.put(
-            f"/genomes/{genome.id}/features.gff3.gz",
-            files={"gff3_gz": gff3_fh, "gff3_gz_tbi": tbi_fh},
-            headers=AUTHORIZATION_HEADER,
-        )
+    return test_client.post(
+        "/tasks",
+        json={"genome_id": genome.id, "kind": "ingest_features"},
+        headers=AUTHORIZATION_HEADER,
+    )
 
 
 def _test_ingest_genome_features(test_client: TestClient, genome: Genome, expected_features: int):
@@ -199,10 +234,8 @@ def _test_ingest_genome_features(test_client: TestClient, genome: Genome, expect
 
     res = _put_genome_features(test_client, genome)
 
-    assert res.status_code == status.HTTP_202_ACCEPTED
-    data = res.json()
-    assert "task" in data
-    task_id = data["task"].split("/")[-1]
+    assert res.status_code == status.HTTP_201_CREATED
+    task_id = res.json()["id"]
 
     # Test we can access the task and that it eventually succeeds
 

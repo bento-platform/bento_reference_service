@@ -66,6 +66,8 @@ workflow fasta_ref {
             fai = s1.fai,
             fasta_drs_uri = drs_fasta.drs_uri,
             fai_drs_uri = drs_fai.drs_uri,
+            gff3_gz_drs_uri = drs_gff3.drs_uri,
+            gff3_gz_tbi_drs_uri = drs_gff3_tbi.drs_uri,
             reference_url = reference_url,
             token = access_token,
             validate_ssl = validate_ssl
@@ -75,8 +77,6 @@ workflow fasta_ref {
         call ingest_gff3_into_ref {
             input:
                 genome_id = genome_id,
-                gff3_gz = select_first([gi.sorted_gff3_gz]),  # Coerce File? into File via select_first
-                gff3_gz_tbi = select_first([gi.sorted_gff3_gz_tbi]),  # "
                 reference_url = reference_url,
                 token = access_token,
                 validate_ssl = validate_ssl,
@@ -217,8 +217,6 @@ task ingest_metadata_into_ref {
 task ingest_gff3_into_ref {
     input {
         String genome_id
-        File gff3_gz
-        File gff3_gz_tbi
         String reference_url
         String token
         Boolean validate_ssl
@@ -228,22 +226,21 @@ task ingest_gff3_into_ref {
     command <<<
         task_res=$(
             curl ~{true="" false="-k" validate_ssl} \
-                -X PUT \
-                -F "gff3_gz=@~{gff3_gz}" \
-                -F "gff3_gz_tbi=@~{gff3_gz_tbi}" \
+                -X POST \
+                --json '{"genome_id": "~{genome_id}", "kind": "ingest_features"}'
                 -H "Authorization: Bearer ~{token}" \
                 --fail-with-body \
-                "~{reference_url}/genomes/~{genome_id}/features.gff3.gz"
+                "~{reference_url}/tasks"
         )
         exit_code=$?
         if [[ "${exit_code}" == 0 ]]; then
-            task_url=$(jq -r '.task' <<< "${task_res}")
+            task_id=$(jq -r '.id' <<< "${task_res}")
             while true; do
                 task_status_res=$(
                     curl ~{true="" false="-k" validate_ssl} \
                         -H "Authorization: Bearer ~{token}" \
                         --fail-with-body \
-                        "${task_url}"
+                        "~{reference_url}/tasks/${task_id}"
                 )
 
                 task_exit_code=$?

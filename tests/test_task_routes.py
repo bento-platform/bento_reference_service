@@ -9,6 +9,15 @@ from .shared_functions import create_genome_with_permissions
 
 
 @pytest.mark.asyncio()
+async def test_task_create_no_genome(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    res = test_client.post("/tasks", json={"genome_id": "DNE", "kind": "ingest_features"}, headers=AUTHORIZATION_HEADER)
+    assert res.status_code == 400  # 400: no genome
+    err = res.json()
+    assert err["errors"][0]["message"] == f"Genome with ID DNE not found."
+
+
+@pytest.mark.asyncio()
 async def test_task_routes(test_client: TestClient, aioresponse: aioresponses, db: Database, db_cleanup):
     # prerequesite: set up a genome
     create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)

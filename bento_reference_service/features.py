@@ -1,3 +1,4 @@
+import aiofiles
 import logging
 import pysam
 import traceback
@@ -6,9 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Generator
 from urllib.parse import unquote as url_unquote
+from uuid import uuid4
 
 from . import models as m
+from .config import Config
 from .db import Database
+from .streaming import stream_from_uri
 
 __all__ = [
     "INGEST_FEATURES_TASK_KIND",
@@ -217,7 +221,7 @@ def iter_features(
 
 async def ingest_features(
     # parameters:
-    genome_id: str,
+    genome: m.GenomeWithURIs,
     gff_path: Path,
     gff_index_path: Path,
     # dependencies:
@@ -228,7 +232,7 @@ async def ingest_features(
     Given a genome ID and a path to an external GTF gene/exon/transcript annotation file, this function copies the GTF
     into the relevant .bentoGenome directory and ingests the annotations into an ElasticSearch index for fuzzy text
     querying of features.
-    :param genome_id: The ID of the genome to attach the annotation to.
+    :param genome: The genome to attach the annotation to.
     :param gff_path: The path to an external GTF.gz-formatted annotation file to copy and read from.
     :param gff_index_path: The path to an external index file for the above .gtf.gz.
     :param db: Database connection/management object.
@@ -236,12 +240,7 @@ async def ingest_features(
     :return: None
     """
 
-    genome: m.GenomeWithURIs | None = await db.get_genome(genome_id)
-
-    if genome is None:
-        raise AnnotationGenomeNotFoundError(f"Genome with ID {genome_id} not found")
-
-    logger.info(f"Ingesting gene features for genome {genome_id}...")
+    logger.info(f"Ingesting gene features for genome {genome.id}...")
 
     features_to_ingest = iter_features(genome, gff_path, gff_index_path, logger)
     n_ingested: int = 0
@@ -265,20 +264,55 @@ async def ingest_features(
     return n_ingested
 
 
-async def ingest_features_task(
-    genome_id: str, gff3_gz_path: Path, gff3_gz_tbi_path: Path, task_id: int, db: Database, logger: logging.Logger
-):
+async def download_feature_files(genome: m.GenomeWithURIs, config: Config, logger: logging.Logger):
+    _, gff3_gz_iter = await stream_from_uri(
+        config, logger, genome.gff3_gz, range_header=None, impose_response_limit=False
+    )
+
+    _, gff3_gz_tbi_iter = await stream_from_uri(
+        config, logger, genome.gff3_gz_tbi, range_header=None, impose_response_limit=False
+    )
+
+    fn = config.file_ingest_tmp_dir / f"{uuid4()}.gff3.gz"
+    fn_tbi = config.file_ingest_tmp_dir / f"{fn}.tbi"
+
+    # copy .gff3.gz to temporary directory for ingestion
+    async with aiofiles.open(fn, "wb") as fh:
+        while data := (await anext(gff3_gz_iter, None)):
+            await fh.write(data)
+
+    logger.debug(f"Wrote GFF.gz data to {fn}; size={fn.stat().st_size}")
+
+    # copy .gff3.gz.tbi to temporary directory for ingestion
+    async with aiofiles.open(fn_tbi, "wb") as fh:
+        while data := (await anext(gff3_gz_tbi_iter, None)):
+            await fh.write(data)
+
+    logger.debug(f"Wrote GFF.gz.tbi data to {fn_tbi}; size={fn_tbi.stat().st_size}")
+
+    return fn, fn_tbi
+
+
+async def ingest_features_task(genome_id: str, task_id: int, config: Config, db: Database, logger: logging.Logger):
     # the ingest_features task moves from queued -> running -> (success | error)
 
     await db.update_task_status(task_id, "running")
 
-    # clear existing gene features for this genome
-    logger.info(f"Clearing gene features for genome {genome_id} in preparation for feature (re-)ingestion...")
-    await db.clear_genome_features(genome_id)
+    genome: m.GenomeWithURIs | None = await db.get_genome(genome_id)
+    if genome is None:
+        raise AnnotationGenomeNotFoundError(f"Genome with ID {genome_id} not found")
+
+    # download GFF3 + GFF3 TBI file for this genome
+    logger.info(f"Downloading gene feature files for genome {genome_id}")
+    gff3_gz_path, gff3_gz_tbi_path = await download_feature_files(genome, config, logger)
 
     try:
+        # clear existing gene features for this genome
+        logger.info(f"Clearing gene features for genome {genome_id} in preparation for feature (re-)ingestion")
+        await db.clear_genome_features(genome_id)
+
         # ingest gene features into the database
-        n_ingested = await ingest_features(genome_id, gff3_gz_path, gff3_gz_tbi_path, db, logger)
+        n_ingested = await ingest_features(genome, gff3_gz_path, gff3_gz_tbi_path, db, logger)
         await db.update_task_status(task_id, "success", message=f"ingested {n_ingested} features")
 
     except Exception as e:

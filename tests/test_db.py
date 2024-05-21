@@ -82,7 +82,7 @@ async def _set_up_sars_cov_2_genome_and_features(db: Database, logger: logging.L
     # prerequesite: ingest features
     gff3_gz_path = Path(TEST_GENOME_SARS_COV_2_OBJ.gff3_gz.replace("file://", ""))
     gff3_gz_tbi_path = Path(TEST_GENOME_SARS_COV_2_OBJ.gff3_gz_tbi.replace("file://", ""))
-    await ingest_features(SARS_COV_2_GENOME_ID, gff3_gz_path, gff3_gz_tbi_path, db, logger)
+    await ingest_features(await db.get_genome(SARS_COV_2_GENOME_ID), gff3_gz_path, gff3_gz_tbi_path, db, logger)
 
 
 async def _set_up_hg38_subset_genome_and_features(db: Database, logger: logging.Logger):
@@ -91,7 +91,7 @@ async def _set_up_hg38_subset_genome_and_features(db: Database, logger: logging.
     # prerequesite: ingest features
     gff3_gz_path = Path(TEST_GENOME_HG38_CHR1_F100K_OBJ.gff3_gz.replace("file://", ""))
     gff3_gz_tbi_path = Path(TEST_GENOME_HG38_CHR1_F100K_OBJ.gff3_gz_tbi.replace("file://", ""))
-    await ingest_features(HG38_CHR1_F100K_GENOME_ID, gff3_gz_path, gff3_gz_tbi_path, db, logger)
+    await ingest_features(await db.get_genome(HG38_CHR1_F100K_GENOME_ID), gff3_gz_path, gff3_gz_tbi_path, db, logger)
 
 
 GENOME_ID_TO_SET_UP_FN = {

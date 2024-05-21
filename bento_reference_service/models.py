@@ -9,9 +9,11 @@ __all__ = [
     "ContigWithRefgetURI",
     "Genome",
     "GenomeWithURIs",
+    "GenomeGFF3Patch",
     "GenomeFeatureEntry",
     "GenomeFeature",
     "TaskStatus",
+    "TaskParams",
     "Task",
 ]
 
@@ -72,6 +74,11 @@ class GenomeWithURIs(Genome):
     contigs: tuple[ContigWithRefgetURI, ...]
 
 
+class GenomeGFF3Patch(BaseModel):
+    gff3_gz: str  # URI
+    gff3_gz_tbi: str  # URI
+
+
 class GenomeFeatureEntry(BaseModel):
     start_pos: int  # 1-based, inclusive
     end_pos: int  # 1-based, exclusive
@@ -102,10 +109,13 @@ class GenomeFeature(BaseModel):
 TaskStatus = Literal["queued", "running", "success", "error"]
 
 
-class Task(BaseModel):
-    id: int
+class TaskParams(BaseModel):
     genome_id: str
     kind: Literal["ingest_features"]
+
+
+class Task(TaskParams):
+    id: int
     status: TaskStatus
     message: str
     created: datetime

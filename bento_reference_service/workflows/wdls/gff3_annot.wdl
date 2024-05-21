@@ -16,13 +16,27 @@ workflow gff3_annot {
             gff3 = genome_gff3
     }
 
-    # TODO: DRS ingestion + updating reference metadata record
+    call ingest_into_drs as drs_gff3 {
+        input:
+            file = gi.sorted_gff3_gz,
+            drs_url = drs_url,
+            access_token = access_token,
+            validate_ssl = validate_ssl
+    }
+
+    call ingest_into_drs as drs_gff3_tbi {
+        input:
+            file = gi.sorted_gff3_gz_tbi,
+            drs_url = drs_url,
+            access_token = access_token,
+            validate_ssl = validate_ssl
+    }
 
     call ingest_gff3_into_ref {
         input:
             genome_id = genome_id,
-            gff3_gz = gi.sorted_gff3_gz,
-            gff3_gz_tbi = gi.sorted_gff3_gz_tbi,
+            gff3_gz_drs_uri = drs_gff3.drs_uri,
+            gff3_gz_tbi_drs_uri = drs_gff3_tbi.drs_uri,
             reference_url = reference_url,
             token = access_token,
             validate_ssl = validate_ssl
@@ -59,35 +73,85 @@ task normalize_and_compress_gff3_and_index {
     }
 }
 
+# TODO: shared file with this task
+task ingest_into_drs {
+    input {
+        File file
+        String drs_url
+        String access_token
+        Boolean validate_ssl
+    }
+
+    command <<<
+        drs_res=$(
+            curl ~{true="" false="-k" validate_ssl} \
+                -X POST \
+                -F "file=@~{file}" \
+                -F "project_id=$project_id" \
+                -F "dataset_id=$dataset_id" \
+                -F "public=true" \
+                -H "Authorization: Bearer ~{access_token}" \
+                --fail-with-body \
+                "~{drs_url}/ingest"
+        )
+        exit_code=$?
+        rm '~{file}'
+        if [[ "${exit_code}" == 0 ]]; then
+            jq -r '.self_uri' <<< "${drs_res}"
+        else
+            exit "${exit_code}"
+        fi
+    >>>
+
+    output {
+        String drs_uri = read_string(stdout())
+    }
+}
+
 task ingest_gff3_into_ref {
     input {
         String genome_id
-        File gff3_gz
-        File gff3_gz_tbi
+        String gff3_gz_drs_uri
+        String gff3_gz_tbi_drs_uri
         String reference_url
         String token
         Boolean validate_ssl
     }
 
     command <<<
-        task_res=$(
+        patch_res=$(
             curl ~{true="" false="-k" validate_ssl} \
-                -X PUT \
-                -F "gff3_gz=@~{gff3_gz}" \
-                -F "gff3_gz_tbi=@~{gff3_gz_tbi}" \
+                -X PATCH \
+                --json '{"gff3_gz": "~{gff3_gz_drs_uri}", "gff3_gz_tbi": "~{gff3_gz_tbi_drs_uri}"}' \
                 -H "Authorization: Bearer ~{token}" \
                 --fail-with-body \
-                "~{reference_url}/genomes/~{genome_id}/features.gff3.gz"
+                "~{reference_url}/genomes/~{genome_id}"
+        )
+
+        exit_code=$?
+        if [[ "${exit_code}" != 0 ]]; then
+            echo "patch failed with body: ${patch_res}" >&2
+            exit "${exit_code}"
+        fi
+
+        task_res=$(
+            curl ~{true="" false="-k" validate_ssl} \
+                -X POST \
+                --json '{"genome_id": "~{genome_id}", "kind": "ingest_features"}' \
+                -H "Authorization: Bearer ~{token}" \
+                --fail-with-body \
+                "~{reference_url}/tasks"
         )
         exit_code=$?
         if [[ "${exit_code}" == 0 ]]; then
-            task_url=$(jq -r '.task' <<< "${task_res}")
+            echo "task created: ${task_res}"
+            task_id=$(jq -r '.id' <<< "${task_res}")
             while true; do
                 task_status_res=$(
                     curl ~{true="" false="-k" validate_ssl} \
                         -H "Authorization: Bearer ~{token}" \
                         --fail-with-body \
-                        "${task_url}"
+                        "~{reference_url}/tasks/${task_id}"
                 )
 
                 task_exit_code=$?
@@ -112,6 +176,7 @@ task ingest_gff3_into_ref {
                 sleep 10
             done
         else
+            echo "task creation failed: ${task_res}" >&2
             exit "${exit_code}"
         fi
     >>>

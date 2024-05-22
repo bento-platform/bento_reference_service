@@ -227,7 +227,7 @@ task ingest_gff3_into_ref {
         task_res=$(
             curl ~{true="" false="-k" validate_ssl} \
                 -X POST \
-                --json '{"genome_id": "~{genome_id}", "kind": "ingest_features"}'
+                --json '{"genome_id": "~{genome_id}", "kind": "ingest_features"}' \
                 -H "Authorization: Bearer ~{token}" \
                 --fail-with-body \
                 "~{reference_url}/tasks"

@@ -193,7 +193,7 @@ task ingest_metadata_into_ref {
 
         if [[ '~{gff3_gz_drs_uri}' != '' ]]; then  # assume if this is set then both gff3 variables are set.
             cat metadata.json | \
-                jq '.gff3_gz = "~{gff3_gz_drs_uri}" | .gff_gz_tbi = "~{gff3_gz_tbi_drs_uri}"' > metadata.json.tmp
+                jq '.gff3_gz = "~{gff3_gz_drs_uri}" | .gff3_gz_tbi = "~{gff3_gz_tbi_drs_uri}"' > metadata.json.tmp
             mv metadata.json.tmp metadata.json
         fi
 

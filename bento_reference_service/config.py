@@ -23,7 +23,7 @@ class Config(BentoBaseConfig):
     file_ingest_tmp_dir: Path = Path(__file__).parent.parent / "tmp"  # Default to repository `tmp` folder
     file_ingest_chunk_size: int = 1024 * 256  # 256 KiB at a time
 
-    file_response_chunk_size: int = 1024 * 16  # 16 KiB at a time
+    file_response_chunk_size: int = 1024 * 256  # 256 KiB at a time
     response_substring_limit: int = 10000  # TODO: Refine default
 
     feature_response_record_limit: int = 1000

@@ -196,6 +196,7 @@ async def stream_from_uri(
             )
 
             # Don't pass Authorization header to possibly external sources
+            logger.debug(f"Streaming from HTTP URL: {url}")
             stream = stream_http(
                 config,
                 url,

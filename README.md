@@ -15,7 +15,7 @@ Reference data (genomes &amp; annotations) service for the Bento platform.
 * Bento-style genome ingestion: **DONE**
 * API endpoint permissions: **DONE**
 * RefGet implementation: _Partially done_
-* Annotation service: **Not done**
+* Annotation service: _Partially done_
 * Tests: _Partially done_
 * Documentation: **Not done**
 

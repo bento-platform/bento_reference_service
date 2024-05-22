@@ -1,31 +1,45 @@
 import pathlib
+from bento_reference_service.models import Genome
 
 __all__ = [
     "DATA_DIR",
     "SARS_COV_2_GENOME_ID",
     "SARS_COV_2_FASTA_PATH",
     "SARS_COV_2_FAI_PATH",
-    "TEST_GENOME_OF_FILE_URIS",
+    "SARS_COV_2_GFF3_GZ_PATH",
+    "SARS_COV_2_GFF3_GZ_TBI_PATH",
+    "TEST_GENOME_SARS_COV_2",
+    "TEST_GENOME_SARS_COV_2_OBJ",
+    "HG38_CHR1_F100K_GENOME_ID",
+    "TEST_GENOME_HG38_CHR1_F100K",
+    "TEST_GENOME_HG38_CHR1_F100K_OBJ",
+    "AUTHORIZATION_HEADER",
 ]
 
 DATA_DIR = (pathlib.Path(__file__).parent / "data").absolute()
 
-SARS_COV_2_GENOME_ID = "NC_045512.2"
+SARS_COV_2_GENOME_ID = "MN908947.3"
+SARS_COV_2_ALIAS = {"alias": "NC_045512.2", "naming_authority": "refseq"}
+SARS_COV_2_FAKE_ALIAS = {"alias": "sars-cov-2", "naming_authority": "me-myself-and-i"}
 SARS_COV_2_FASTA_PATH = DATA_DIR / "sars_cov_2.fa"
 SARS_COV_2_FAI_PATH = DATA_DIR / "sars_cov_2.fa.fai"
+SARS_COV_2_GFF3_GZ_PATH = DATA_DIR / "sars_cov_2.gff3.gz"
+SARS_COV_2_GFF3_GZ_TBI_PATH = DATA_DIR / "sars_cov_2.gff3.gz.tbi"
 
-TEST_GENOME_OF_FILE_URIS = {
+TEST_GENOME_SARS_COV_2 = {
     "id": SARS_COV_2_GENOME_ID,
-    "aliases": [],
-    "md5": "825ab3c54b7a67ff2db55262eb532438",
-    "ga4gh": "SQ.mMg8qNej7pU84juQQWobw9JyUy09oYdd",
+    "aliases": [SARS_COV_2_ALIAS, SARS_COV_2_FAKE_ALIAS],
+    "md5": "b98334cd0015ee1b1d2dc3b9d81b325e",
+    "ga4gh": "SQ.F4O8uhlkMQ76rmE6SmUFFjp04UV25Ybn",
     "fasta": f"file://{SARS_COV_2_FASTA_PATH}",
     "fai": f"file://{SARS_COV_2_FAI_PATH}",
+    "gff3_gz": f"file://{SARS_COV_2_GFF3_GZ_PATH}",
+    "gff3_gz_tbi": f"file://{SARS_COV_2_GFF3_GZ_TBI_PATH}",
     "taxon": {"id": "NCBITaxon:2697049", "label": "Severe acute respiratory syndrome coronavirus 2"},
     "contigs": [
         {
             "name": SARS_COV_2_GENOME_ID,
-            "aliases": [],
+            "aliases": [SARS_COV_2_ALIAS, SARS_COV_2_FAKE_ALIAS],
             "md5": "105c82802b67521950854a851fc6eefd",
             "ga4gh": "SQ.SyGVJg_YRedxvsjpqNdUgyyqx7lUfu_D",
             "length": 29903,
@@ -33,3 +47,29 @@ TEST_GENOME_OF_FILE_URIS = {
         },
     ],
 }
+TEST_GENOME_SARS_COV_2_OBJ = Genome(**TEST_GENOME_SARS_COV_2)
+
+HG38_CHR1_F100K_GENOME_ID = "hg38-chr1-f100k"
+TEST_GENOME_HG38_CHR1_F100K = {
+    "id": HG38_CHR1_F100K_GENOME_ID,
+    "md5": "80c4a2f1d70d2ca5babe40ca24e47e85",
+    "ga4gh": "SQ.Sd58mcdOdfBAdpwaLFeI5bHwjspHd2D6",
+    "fasta": f"file://{DATA_DIR / 'hg38.chr1.f100k.fa'}",
+    "fai": f"file://{DATA_DIR / 'hg38.chr1.f100k.fa.fai'}",
+    "gff3_gz": f"file://{DATA_DIR / 'gencode.v45.first-few.gff3.gz'}",
+    "gff3_gz_tbi": f"file://{DATA_DIR / 'gencode.v45.first-few.gff3.gz.tbi'}",
+    "taxon": {"id": "NCBITaxon:9606", "label": "Homo sapiens"},
+    "contigs": [
+        {
+            "name": "chr1",
+            "aliases": [],
+            "md5": "d12b28d76aa3c1c6bb143b8da8cce642",
+            "ga4gh": "SQ.jTVrjy4tzSYmexXZs_cfFWNuRKpvpVBI",
+            "length": 100000,
+            "circular": False,
+        }
+    ],
+}
+TEST_GENOME_HG38_CHR1_F100K_OBJ = Genome(**TEST_GENOME_HG38_CHR1_F100K)
+
+AUTHORIZATION_HEADER = {"Authorization": "Token bearer"}

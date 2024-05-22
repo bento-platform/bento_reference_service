@@ -145,7 +145,13 @@ async def refget_sequence(
 
     # TODO: correct range: accounting for offsets in file from FAI
     return generate_uri_streaming_response(
-        config, logger, genome.fasta, "TODO", "text/x-fasta", headers, impose_response_limit=True
+        config,
+        logger,
+        genome.fasta,
+        "TODO",
+        "text/x-fasta",
+        impose_response_limit=True,
+        extra_response_headers=headers,
     )
 
 

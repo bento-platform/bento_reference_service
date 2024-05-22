@@ -264,31 +264,32 @@ async def ingest_features(
     return n_ingested
 
 
-async def download_feature_files(genome: m.GenomeWithURIs, config: Config, logger: logging.Logger):
-    _, gff3_gz_iter = await stream_from_uri(
-        config, logger, genome.gff3_gz, range_header=None, impose_response_limit=False
-    )
+async def download_uri_into_temporary_file(uri: str, tmp: Path, config: Config, logger: logging.Logger):
+    logger.debug(f"Saving data from URI {uri} into temporary file {tmp}")
 
-    _, gff3_gz_tbi_iter = await stream_from_uri(
-        config, logger, genome.gff3_gz_tbi, range_header=None, impose_response_limit=False
-    )
-
-    fn = config.file_ingest_tmp_dir / f"{uuid4()}.gff3.gz"
-    fn_tbi = config.file_ingest_tmp_dir / f"{fn}.tbi"
+    _, stream_iter = await stream_from_uri(config, logger, uri, range_header=None, impose_response_limit=False)
 
     # copy .gff3.gz to temporary directory for ingestion
-    async with aiofiles.open(fn, "wb") as fh:
-        while data := (await anext(gff3_gz_iter, None)):
+    async with aiofiles.open(tmp, "wb") as fh:
+        while data := (await anext(stream_iter, None)):
             await fh.write(data)
 
-    logger.debug(f"Wrote GFF.gz data to {fn}; size={fn.stat().st_size}")
+    logger.debug(f"Wrote downloaded data to {tmp}; size={tmp.stat().st_size}")
 
-    # copy .gff3.gz.tbi to temporary directory for ingestion
-    async with aiofiles.open(fn_tbi, "wb") as fh:
-        while data := (await anext(gff3_gz_tbi_iter, None)):
-            await fh.write(data)
 
-    logger.debug(f"Wrote GFF.gz.tbi data to {fn_tbi}; size={fn_tbi.stat().st_size}")
+async def download_feature_files(genome: m.GenomeWithURIs, config: Config, logger: logging.Logger):
+    tmp_file_id = str(uuid4())
+
+    if genome.gff3_gz is None:
+        raise AnnotationIngestError(f"Genome {genome.id} is missing a GFF3 file")
+    if genome.gff3_gz_tbi is None:
+        raise AnnotationIngestError(f"Genome {genome.id} is missing a GFF3 Tabix index")
+
+    fn = config.file_ingest_tmp_dir / f"{tmp_file_id}.gff3.gz"
+    await download_uri_into_temporary_file(genome.gff3_gz, fn, config, logger)
+
+    fn_tbi = config.file_ingest_tmp_dir / f"{tmp_file_id}.gff3.gz.tbi"
+    await download_uri_into_temporary_file(genome.gff3_gz_tbi, fn_tbi, config, logger)
 
     return fn, fn_tbi
 
@@ -300,11 +301,23 @@ async def ingest_features_task(genome_id: str, task_id: int, config: Config, db:
 
     genome: m.GenomeWithURIs | None = await db.get_genome(genome_id)
     if genome is None:
-        raise AnnotationGenomeNotFoundError(f"Genome with ID {genome_id} not found")
+        err = f"task {task_id}: genome with ID {genome_id} not found"
+        logger.error(err)
+        await db.update_task_status(task_id, "error", message=err)
+        raise AnnotationGenomeNotFoundError(err)
 
-    # download GFF3 + GFF3 TBI file for this genome
-    logger.info(f"Downloading gene feature files for genome {genome_id}")
-    gff3_gz_path, gff3_gz_tbi_path = await download_feature_files(genome, config, logger)
+    try:
+        # download GFF3 + GFF3 TBI file for this genome
+        logger.info(f"Downloading gene feature files for genome {genome_id}")
+        gff3_gz_path, gff3_gz_tbi_path = await download_feature_files(genome, config, logger)
+    except Exception as e:
+        err = (
+            f"task {task_id}: encountered exception while downloading feature files: {e}; traceback: "
+            f"{traceback.format_exc()}"
+        )
+        logger.error(err)
+        await db.update_task_status(task_id, "error", message=err)
+        raise AnnotationIngestError(err)
 
     try:
         # clear existing gene features for this genome

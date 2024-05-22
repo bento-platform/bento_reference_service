@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError, StarletteHTTPException
+from urllib.parse import urlparse
 
 from bento_lib.responses.fastapi_errors import (
     http_exception_handler_factory,
@@ -37,7 +38,14 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title=config_for_setup.service_name,
+    root_path=urlparse(config_for_setup.service_url_base_path).path,
+    docs_url=config_for_setup.service_docs_path,
+    openapi_url=config_for_setup.service_openapi_path,
+    version=__version__,
+    lifespan=lifespan,
+)
 
 # Attach different routers to the app, for:
 # - genome listing

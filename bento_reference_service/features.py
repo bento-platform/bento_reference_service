@@ -95,6 +95,8 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
             return f"{transcript_name} 5' UTR" if transcript_name else None
         case "3utr" | "three_prime_utr":  # 3' untranslated region (UTR)
             return f"{transcript_name} 3' UTR" if transcript_name else None
+        case "utr":  # unspecified untranslated region (UTR)
+            return f"{transcript_name} UTR" if transcript_name else None
         case "start_codon":
             return f"{transcript_name} start codon" if transcript_name else None
         case "stop_codon":

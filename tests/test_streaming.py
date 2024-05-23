@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from aioresponses import aioresponses
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
 from bento_reference_service import config as c, streaming as s
 
@@ -26,7 +26,7 @@ async def test_http_streaming(aioresponse: aioresponses):
 
 @pytest.mark.asyncio()
 async def test_http_streaming_404_1(aioresponse: aioresponses):
-    aioresponse.get(HTTP_TEST_URI, status=404, body=b"Not Found")
+    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
     with pytest.raises(s.StreamingProxyingError):
         stream = s.stream_http(c.get_config(), HTTP_TEST_URI, {})
         await anext(stream)
@@ -34,7 +34,7 @@ async def test_http_streaming_404_1(aioresponse: aioresponses):
 
 @pytest.mark.asyncio()
 async def test_http_streaming_404_2(aioresponse: aioresponses):
-    aioresponse.get(HTTP_TEST_URI, status=404, body=b"Not Found")
+    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
     with pytest.raises(s.StreamingProxyingError):
         _, stream = await s.stream_from_uri(c.get_config(), logger, HTTP_TEST_URI, None, False)
         await anext(stream)
@@ -42,7 +42,7 @@ async def test_http_streaming_404_2(aioresponse: aioresponses):
 
 @pytest.mark.asyncio()
 async def test_http_streaming_404_3(aioresponse: aioresponses):
-    aioresponse.get(HTTP_TEST_URI, status=404, body=b"Not Found")
+    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
     with pytest.raises(HTTPException):
         res = await s.generate_uri_streaming_response(
             c.get_config(),

@@ -1,5 +1,6 @@
 import pytest
 from aioresponses import aioresponses
+from fastapi import status
 from fastapi.testclient import TestClient
 
 from bento_reference_service.db import Database
@@ -12,7 +13,7 @@ from .shared_functions import create_genome_with_permissions
 async def test_task_create_no_genome(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.post("/tasks", json={"genome_id": "DNE", "kind": "ingest_features"}, headers=AUTHORIZATION_HEADER)
-    assert res.status_code == 400  # 400: no genome
+    assert res.status_code == status.HTTP_400_BAD_REQUEST  # 400: no genome
     err = res.json()
     assert err["errors"][0]["message"] == f"Genome with ID DNE not found."
 
@@ -25,7 +26,7 @@ async def test_task_routes(test_client: TestClient, aioresponse: aioresponses, d
     # prerequesite: initialize the database for the web app + validate there aren't any tasks
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.get("/tasks", headers=AUTHORIZATION_HEADER)
-    assert res.status_code == 200
+    assert res.status_code == status.HTTP_200_OK
     rd = res.json()
     assert len(rd) == 0
 
@@ -35,7 +36,7 @@ async def test_task_routes(test_client: TestClient, aioresponse: aioresponses, d
     # make sure the task now shows up in the list of tasks in the initial state
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.get("/tasks", headers=AUTHORIZATION_HEADER)
-    assert res.status_code == 200
+    assert res.status_code == status.HTTP_200_OK
     rd = res.json()
     assert len(rd) == 1
     assert rd[0]["genome_id"] == SARS_COV_2_GENOME_ID
@@ -48,4 +49,4 @@ async def test_task_routes(test_client: TestClient, aioresponse: aioresponses, d
 
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.get(f"/tasks/0", headers=AUTHORIZATION_HEADER)
-    assert res.status_code == 404
+    assert res.status_code == status.HTTP_404_NOT_FOUND

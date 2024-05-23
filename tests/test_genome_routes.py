@@ -36,21 +36,20 @@ async def test_genome_list(test_client: TestClient):
     assert res.content == b"[]"  # empty json list
 
 
-async def test_404s_with_no_genomes(test_client: TestClient):
-    res = test_client.get("/genomes/hg19")
-    assert res.status_code == status.HTTP_404_NOT_FOUND
-
-    res = test_client.get("/genomes/hg19/contigs")
-    assert res.status_code == status.HTTP_404_NOT_FOUND
-
-    res = test_client.get("/genomes/hg19/contigs/chr1")
-    assert res.status_code == status.HTTP_404_NOT_FOUND
-
-    res = test_client.get("/genomes/hg19.fa")
-    assert res.status_code == status.HTTP_404_NOT_FOUND
-
-    res = test_client.get("/genomes/hg19.fa.fai")
-    assert res.status_code == status.HTTP_404_NOT_FOUND
+@pytest.mark.parametrize("endpoint", (
+    "/genomes/hg19",
+    "/genomes/hg19/contigs",
+    "/genomes/hg19/contigs/chr1",
+    "/genomes/hg19.fa",
+    "/genomes/hg19.fa.fai",
+    "/genomes/hg19/features",
+    "/genomes/hg19/features/1",
+    "/genomes/hg19/features.gff3.gz",
+    "/genomes/hg19/features.gff3.gz.tbi",
+    "/genomes/hg19/igv-js-features",
+))
+async def test_get_404s_with_no_genomes(test_client: TestClient, endpoint: str):
+    assert test_client.get(endpoint).status_code == status.HTTP_404_NOT_FOUND
 
 
 def create_covid_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
@@ -299,7 +298,7 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
 
     # Test we can query genome features
     sr = test_client.get(f"/genomes/{genome.id}/feature_types")
-    assert sr.status_code == 200
+    assert sr.status_code == status.HTTP_200_OK
     srd = sr.json()
     assert sum(srd.values()) == expected_features
 
@@ -307,7 +306,7 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
 
     #  - regular expression
     sr = test_client.get(f"/genomes/{genome.id}/features", params={"q": "ENSSASP00005000003"})
-    assert sr.status_code == 200
+    assert sr.status_code == status.HTTP_200_OK
     srd = sr.json()
     assert len(srd["results"]) == 1
     assert srd["pagination"]["total"] == 1
@@ -317,20 +316,20 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
 
     #  - fuzzy search
     sr = test_client.get(f"/genomes/{genome.id}/features", params={"q": "ENSSASP00005000003", "q_fzy": "true"})
-    assert sr.status_code == 200
+    assert sr.status_code == status.HTTP_200_OK
     srd = sr.json()
     assert len(srd["results"]) == 10  # fuzzy search yields many results
 
     # Test we can filter genome features (ID used as name)
     sr = test_client.get(f"/genomes/{genome.id}/features", params={"name": "CDS:ENSSASP00005000003"})
-    assert sr.status_code == 200
+    assert sr.status_code == status.HTTP_200_OK
     srd = sr.json()
     assert len(srd["results"]) == 1
     assert srd["pagination"]["total"] == 1
 
     # Test we can list genome features - we get back the first 10
     sr = test_client.get(f"/genomes/{genome.id}/features")
-    assert sr.status_code == 200
+    assert sr.status_code == status.HTTP_200_OK
     srd = sr.json()
     assert len(srd["results"]) == 10
     assert srd["pagination"]["offset"] == 0
@@ -338,12 +337,16 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
 
     # Test we can get a feature by ID
     sr = test_client.get(f"/genomes/{genome.id}/features/CDS:ENSSASP00005000003")
-    assert sr.status_code == 200
+    assert sr.status_code == status.HTTP_200_OK
     assert sr.json()["feature_id"] == "CDS:ENSSASP00005000003"
+
+    # Test we can get a feature by ID
+    sr = test_client.get(f"/genomes/{genome.id}/features/does-not-exist")
+    assert sr.status_code == status.HTTP_404_NOT_FOUND
 
     # Test we can do an IGV.js search
     sr = test_client.get(f"/genomes/{genome.id}/igv-js-features", params={"q": "ENSSASP00005000003"})
-    assert sr.status_code == 200
+    assert sr.status_code == status.HTTP_200_OK
     srd = sr.json()
     assert len(srd) == 1
     assert srd[0]["chromosome"] == q_feature["contig_name"]

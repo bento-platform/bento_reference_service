@@ -177,6 +177,8 @@ async def genomes_detail_features(
     offset: int = 0,
     limit: int = 10,
 ):
+    await get_genome_or_raise_404(db, genome_id)
+
     st = datetime.now()
 
     results, pagination = await db.query_genome_features(
@@ -196,21 +198,32 @@ async def genomes_detail_features(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def genomes_detail_features_delete(db: DatabaseDependency, genome_id: str):
+    await get_genome_or_raise_404(db, genome_id)
     await db.clear_genome_features(genome_id)
 
 
 @genome_router.get("/{genome_id}/features/{feature_id}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_features_detail(db: DatabaseDependency, genome_id: str, feature_id: str):
-    return await db.get_genome_feature_by_id(genome_id, feature_id)
+    await get_genome_or_raise_404(db, genome_id)
+
+    if feature := await db.get_genome_feature_by_id(genome_id, feature_id):
+        return feature
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail=f"Feature with ID {feature_id} not found on genome {genome_id}"
+    )
 
 
 @genome_router.get("/{genome_id}/igv-js-features", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_igv_js_features(
     db: DatabaseDependency, genome_id: str, q: str | None = None
 ) -> list[m.GenomeFeatureIGV]:
+    await get_genome_or_raise_404(db, genome_id)
+
     results, _ = await db.query_genome_features(
         genome_id, name=q, name_fzy=True, feature_types=["mRNA", "gene", "transcript", "exon"], limit=1
     )
+
     return [
         m.GenomeFeatureIGV(chromosome=r.contig_name, start=r.entries[0].start_pos, end=r.entries[-1].end_pos)
         for r in results

@@ -313,6 +313,7 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
     assert srd["pagination"]["total"] == 1
     assert isinstance(srd.get("time"), float)
     assert srd["time"] < 0.2  # this is a very basic operation on a small dataset and should be fast.
+    q_feature = srd["results"][0]
 
     #  - fuzzy search
     sr = test_client.get(f"/genomes/{genome.id}/features", params={"q": "ENSSASP00005000003", "q_fzy": "true"})
@@ -339,3 +340,12 @@ async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: ai
     sr = test_client.get(f"/genomes/{genome.id}/features/CDS:ENSSASP00005000003")
     assert sr.status_code == 200
     assert sr.json()["feature_id"] == "CDS:ENSSASP00005000003"
+
+    # Test we can do an IGV.js search
+    sr = test_client.get(f"/genomes/{genome.id}/igv-js-features", params={"q": "ENSSASP00005000003"})
+    assert sr.status_code == 200
+    srd = sr.json()
+    assert len(srd) == 1
+    assert srd[0]["chromosome"] == q_feature["contig_name"]
+    assert srd[0]["start"] == q_feature["entries"][0]["start_pos"]
+    assert srd[0]["end"] == q_feature["entries"][0]["end_pos"]

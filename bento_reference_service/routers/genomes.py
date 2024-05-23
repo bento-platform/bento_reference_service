@@ -204,6 +204,20 @@ async def genomes_detail_features_detail(db: DatabaseDependency, genome_id: str,
     return await db.get_genome_feature_by_id(genome_id, feature_id)
 
 
+@genome_router.get("/{genome_id}/igv-js-features", dependencies=[authz_middleware.dep_public_endpoint()])
+async def genomes_detail_igv_js_features(
+    db: DatabaseDependency, genome_id: str, q: str | None = None
+) -> list[m.GenomeFeatureIGV]:
+    results, _ = await db.query_genome_features(
+        genome_id, name=q, name_fzy=True, feature_types=["mRNA", "gene", "transcript", "exon"], limit=1
+    )
+    return [
+        m.GenomeFeatureIGV(chromosome=r.contig_name, start=r.entries[0].start_pos, end=r.entries[-1].end_pos)
+        for r in results
+        if len(r.entries) > 0
+    ]
+
+
 @genome_router.get("/{genome_id}/features.gff3.gz", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_features_gff3(
     config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request, genome_id: str

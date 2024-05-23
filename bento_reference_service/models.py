@@ -106,6 +106,12 @@ class GenomeFeature(BaseModel):
     parents: tuple[str, ...]
 
 
+class GenomeFeatureIGV(BaseModel):
+    chromosome: str
+    start: int
+    end: int
+
+
 TaskStatus = Literal["queued", "running", "success", "error"]
 
 

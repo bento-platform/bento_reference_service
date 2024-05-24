@@ -257,13 +257,13 @@ tests-no-zope = ["attrs[tests-mypy]", "cloudpickle", "hypothesis", "pympler", "p
 
 [[package]]
 name = "bento-lib"
-version = "11.9.0"
+version = "11.10.0"
 description = "A set of common utilities and helpers for Bento platform services."
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "bento_lib-11.9.0-py3-none-any.whl", hash = "sha256:f89a3116ac3dd568e7d7595d41a7387d390adc68da989fc4325ee76e49459eae"},
-    {file = "bento_lib-11.9.0.tar.gz", hash = "sha256:a985e9e2e5f4e61fd4d47e551c6c52e6fb7d3a5b2936c3f312025f0dade95f63"},
+    {file = "bento_lib-11.10.0-py3-none-any.whl", hash = "sha256:c4be79c3a0a67ee48be4cf84aebab84532b8ac07d5ed77fdfb302513ab076aad"},
+    {file = "bento_lib-11.10.0.tar.gz", hash = "sha256:7ea6e0c4477d6789e3bf3b129a3a5324953e2e21a18e575b6248de15d1b562ee"},
 ]
 
 [package.dependencies]
@@ -2008,13 +2008,13 @@ typing-extensions = ">=3.7.4.3"
 
 [[package]]
 name = "typing-extensions"
-version = "4.11.0"
+version = "4.12.0"
 description = "Backported and Experimental Type Hints for Python 3.8+"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "typing_extensions-4.11.0-py3-none-any.whl", hash = "sha256:c1f94d72897edaf4ce775bb7558d5b79d8126906a14ea5ed1635921406c0387a"},
-    {file = "typing_extensions-4.11.0.tar.gz", hash = "sha256:83f085bd5ca59c80295fc2a82ab5dac679cbe02b9f33f7d83af68e241bea51b0"},
+    {file = "typing_extensions-4.12.0-py3-none-any.whl", hash = "sha256:b349c66bea9016ac22978d800cfff206d5f9816951f12a7d0ec5578b0a819594"},
+    {file = "typing_extensions-4.12.0.tar.gz", hash = "sha256:8cbcdc8606ebcb0d95453ad7dc5065e6237b6aa230a31e81d0f440c30fed5fd8"},
 ]
 
 [[package]]
@@ -2502,4 +2502,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10.0"
-content-hash = "3eb8b9caf027548e84e246c4fce111df41115b0bc53a02605ee5d057ae6bcfec"
+content-hash = "cc477a8e71ace01f41b835e0099aa2048fb6a5a7376241c47d0ba50523cfced7"

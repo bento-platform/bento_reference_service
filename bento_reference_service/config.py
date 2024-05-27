@@ -27,7 +27,7 @@ class Config(BentoBaseConfig):
     file_ingest_chunk_size: int = 1024 * 256  # 256 KiB at a time
 
     file_response_chunk_size: int = 1024 * 256  # 256 KiB at a time
-    response_substring_limit: int = 10000  # TODO: Refine default
+    response_substring_limit: int = 100000  # 100 KB
 
     feature_response_record_limit: int = 1000
 

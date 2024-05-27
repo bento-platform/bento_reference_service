@@ -71,9 +71,7 @@ def test_refget_sequence_invalid_requests(test_client: TestClient, aioresponse: 
     assert res.content == b"Bad Request"
 
     # bad range header
-    res = test_client.get(
-        f"/sequence/{test_contig['md5']}", headers={"Range": "dajkshfasd", **HEADERS_ACCEPT_PLAIN}
-    )
+    res = test_client.get(f"/sequence/{test_contig['md5']}", headers={"Range": "dajkshfasd", **HEADERS_ACCEPT_PLAIN})
     assert res.status_code == status.HTTP_400_BAD_REQUEST
     assert res.content == b"Bad Request"
 
@@ -91,7 +89,59 @@ def test_refget_sequence_full(test_client: TestClient, aioresponse: aioresponses
     # ------------------------------------------------------------------------------------------------------------------
 
     # COVID genome should be small enough to fit in the default max-size Refget response, yielding a 200 (not a 206):
+
+    spec_content_type = "text/vnd.ga4gh.refget.v2.0.0+plain; charset=us-ascii"
+
     res = test_client.get(f"/sequence/{test_contig['md5']}", headers=HEADERS_ACCEPT_PLAIN)
     assert res.status_code == status.HTTP_200_OK
-    assert res.headers["Content-Type"] == "text/vnd.ga4gh.refget.v2.0.0+plain; charset=us-ascii"
+    assert res.headers["Content-Type"] == spec_content_type
     assert res.content == seq
+
+    # Range header starting at 0 should get the whole sequence as well
+
+    res = test_client.get(f"/sequence/{test_contig['md5']}", headers={"Range": "bytes=0-", **HEADERS_ACCEPT_PLAIN})
+    assert res.status_code == status.HTTP_206_PARTIAL_CONTENT
+    assert res.headers["Content-Type"] == spec_content_type
+    assert res.content == seq
+
+
+def test_refget_sequence_partial(test_client, aioresponse: aioresponses, db_cleanup):
+    # TODO: fixture
+    create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
+
+    test_contig = TEST_GENOME_SARS_COV_2["contigs"][0]
+    seq_url = f"/sequence/{test_contig['md5']}"
+
+    # Load COVID contig bytes
+    rf = pysam.FastaFile(str(SARS_COV_2_FASTA_PATH))
+    seq = rf.fetch(test_contig["name"]).encode("ascii")
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    # The following three responses should be equivalent except for status codes:
+
+    def _check_first_10(r, sc, ar="none"):
+        assert r.status_code == sc
+        assert r.headers["Accept-Ranges"] == ar
+        assert r.headers["Content-Length"] == "10"
+        assert r.content == seq[:10]
+
+    res = test_client.get(seq_url, params={"start": "0", "end": "10"}, headers=HEADERS_ACCEPT_PLAIN)
+    _check_first_10(res, status.HTTP_200_OK)
+
+    res = test_client.get(seq_url, params={"end": "10"}, headers=HEADERS_ACCEPT_PLAIN)
+    _check_first_10(res, status.HTTP_200_OK)
+
+    # range - end is inclusive:
+    res = test_client.get(seq_url, headers={"Range": "bytes=0-9", **HEADERS_ACCEPT_PLAIN})
+    _check_first_10(res, status.HTTP_206_PARTIAL_CONTENT, "bytes")
+
+    # ---
+
+    res = test_client.get(seq_url, params={"start": "10"}, headers=HEADERS_ACCEPT_PLAIN)
+    assert res.status_code == status.HTTP_200_OK
+    assert res.content == seq[10:]
+
+    res = test_client.get(seq_url, headers={"Range": "bytes=10-", **HEADERS_ACCEPT_PLAIN})
+    assert res.status_code == status.HTTP_206_PARTIAL_CONTENT
+    assert res.content == seq[10:]

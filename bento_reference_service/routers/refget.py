@@ -196,7 +196,7 @@ async def refget_sequence(
     fasta_start_byte = fai_byte_offset + start_final + n_newline_bytes_before_start
     fasta_end_byte = fai_byte_offset + end_final + n_newline_bytes_before_end
 
-    fasta_range_header = f"Range: bytes={fasta_start_byte}-{fasta_end_byte}"
+    fasta_range_header = f"bytes={fasta_start_byte}-{fasta_end_byte}"
 
     _, fasta_stream = await stream_from_uri(
         config,

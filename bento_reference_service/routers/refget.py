@@ -99,6 +99,8 @@ async def refget_sequence(
         REFGET_HEADER_TEXT_WITH_CHARSET,
         REFGET_HEADER_TEXT,
         "text/plain",
+        "text/*",
+        "*/*",
     ):
         # TODO: plain text error:
         raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Not Acceptable")

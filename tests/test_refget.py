@@ -75,6 +75,15 @@ def test_refget_sequence_invalid_requests(test_client: TestClient, aioresponse: 
     assert res.status_code == status.HTTP_400_BAD_REQUEST
     assert res.content == b"Bad Request"
 
+    # cannot have range header and start/end
+    res = test_client.get(
+        f"/sequence/{test_contig['md5']}",
+        params={"start": "0", "end": "11"},
+        headers={"Range": "bytes=0-10", **HEADERS_ACCEPT_PLAIN},
+    )
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert res.content == b"Bad Request"
+
 
 def test_refget_sequence_full(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
     # TODO: fixture

@@ -138,19 +138,15 @@ async def refget_sequence(
     contig_fai = parsed_fai_data[contig.name]  # TODO: handle lookup error
 
     start_final: int = 0  # 0-based, inclusive
-    end_final: int = contig.length - 1  # 0-based, exclusive - need to adjust range (which is inclusive)
+    end_final: int = contig.length  # 0-based, exclusive - need to adjust range (which is inclusive)
 
     if start is not None:
-        if end is not None:
-            headers["Accept-Ranges"] = "none"
-            if start > end:
-                if not contig.circular:
-                    logger.error("range not satisfiable: start > end")
-                    return REFGET_RANGE_NOT_SATISFIABLE
-                else:
-                    raise NotImplementedError()  # TODO: support circular contig querying
-            end_final = end
         start_final = start
+        headers["Accept-Ranges"] = "none"
+
+    if end is not None:
+        end_final = end
+        headers["Accept-Ranges"] = "none"
 
     if range_header is not None:
         range_header_match = RANGE_HEADER_PATTERN.match(range_header)
@@ -165,6 +161,13 @@ async def refget_sequence(
         except ValueError as e:
             logger.error(f"bad request: bad range (ValueError: {e})")
             return REFGET_BAD_REQUEST
+
+    if start_final > end_final:
+        if not contig.circular:
+            logger.error("range not satisfiable: start > end")
+            return REFGET_RANGE_NOT_SATISFIABLE
+        else:
+            raise NotImplementedError()  # TODO: support circular contig querying
 
     # Final bounds-checking
     if start_final >= contig.length:

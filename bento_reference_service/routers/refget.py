@@ -1,26 +1,30 @@
 import io
+import math
 
+from bento_lib.service_info.helpers import build_service_type, build_service_info_from_pydantic_config
+from bento_lib.service_info.types import GA4GHServiceInfo
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from .. import models
+from .. import models, __version__
 from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..constants import RANGE_HEADER_PATTERN
 from ..db import DatabaseDependency
 from ..logger import LoggerDependency
 from ..models import Alias
-from ..streaming import stream_from_uri, generate_uri_streaming_response
+from ..streaming import stream_from_uri
 
 
 __all__ = [
     "refget_router",
 ]
 
-
-REFGET_HEADER_TEXT = "text/vnd.ga4gh.refget.v1.0.1+plain"
+REFGET_VERSION = "2.0.0"
+REFGET_HEADER_TEXT = f"text/vnd.ga4gh.refget.v{REFGET_VERSION}+plain"
 REFGET_HEADER_TEXT_WITH_CHARSET = f"{REFGET_HEADER_TEXT}; charset=us-ascii"
-REFGET_HEADER_JSON = "application/vnd.ga4gh.refget.v1.0.1+json"
+REFGET_HEADER_JSON = f"application/vnd.ga4gh.refget.v{REFGET_VERSION}+json"
 REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
 
 refget_router = APIRouter(prefix="/sequence")
@@ -94,9 +98,8 @@ async def refget_sequence(
         fb.seek(0)
         fai_data = fb.read()
 
-    # TODO: translate contig fetch into FASTA fetch using FAI data
-    #  since FASTAs can have newlines, we need to account for the difference between bytes requested + the bases we
-    #  return
+    parsed_fai_data = parse_fai(fai_data)
+    contig_fai = parsed_fai_data[contig.name]  # TODO: handle lookup error
 
     # TODO: correct refget-formatted errors
 
@@ -143,15 +146,40 @@ async def refget_sequence(
             status_code=status.HTTP_400_BAD_REQUEST, detail="request for too many bytes"
         )  # TODO: what is real error?
 
-    # TODO: correct range: accounting for offsets in file from FAI
-    return generate_uri_streaming_response(
+    # Translate contig fetch into FASTA fetch using FAI data:
+    #  - since FASTAs can have newlines, we need to account for the difference between bytes requested + the bases we
+    #    return
+
+    fai_n_bases, fai_byte_offset, fai_bases_per_line, fai_bytes_per_line_with_newlines = contig_fai
+
+    newline_bytes_per_line = fai_bytes_per_line_with_newlines - fai_bases_per_line
+    n_newline_bytes_before_start = int(math.floor(start_final / fai_bases_per_line)) * newline_bytes_per_line
+    n_newline_bytes_before_end = int(math.floor(end_final / fai_bases_per_line)) * newline_bytes_per_line
+
+    fasta_start_byte = fai_byte_offset + start_final + n_newline_bytes_before_start
+    fasta_end_byte = fai_byte_offset + end_final + n_newline_bytes_before_end
+
+    fasta_range_header = f"Range: bytes={fasta_start_byte}-{fasta_end_byte}"
+
+    _, fasta_stream = await stream_from_uri(
         config,
         logger,
         genome.fasta,
-        "TODO",
-        "text/x-fasta",
+        fasta_range_header,
         impose_response_limit=True,
-        extra_response_headers=headers,
+    )
+
+    async def _format_response():
+        async for fasta_chunk in fasta_stream:
+            yield fasta_chunk.replace(b"\n", b"").replace(b"\r", b"")
+
+    stream = _format_response()
+
+    return StreamingResponse(
+        stream,
+        headers=headers,
+        media_type="text/x-fasta",
+        status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
     )
 
 
@@ -197,17 +225,23 @@ async def refget_sequence_metadata(
     )
 
 
-# TODO: redo for refget 2 properly
 @refget_router.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
-async def refget_service_info(config: ConfigDependency, response: Response) -> dict:
+async def refget_service_info(config: ConfigDependency, logger: LoggerDependency, response: Response) -> dict:
     response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
-    # TODO: respond will full service info
+
+    genome_service_info: GA4GHServiceInfo = await build_service_info_from_pydantic_config(
+        config, logger, {}, build_service_type("org.ga4gh", "refget", REFGET_VERSION), __version__
+    )
+
+    del genome_service_info["bento"]
+
     return {
+        **genome_service_info,
         "refget": {
             "circular_supported": False,
             "algorithms": ["md5", "ga4gh"],
             # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
             # It's a substring!
             "subsequence_limit": config.response_substring_limit,
-        }
+        },
     }

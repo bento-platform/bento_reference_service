@@ -157,7 +157,7 @@ async def refget_sequence(
         try:
             start_final = int(range_header_match.group(1))
             if end_val := range_header_match.group(2):
-                end_final = end_val + 1  # range is inclusive, so we have to adjust it to be exclusive
+                end_final = int(end_val) + 1  # range is inclusive, so we have to adjust it to be exclusive
         except ValueError as e:
             logger.error(f"bad request: bad range (ValueError: {e})")
             return REFGET_BAD_REQUEST

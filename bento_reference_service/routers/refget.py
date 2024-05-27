@@ -47,6 +47,41 @@ def parse_fai(fai_data: bytes) -> dict[str, tuple[int, int, int, int]]:
     return res
 
 
+@refget_router.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
+async def refget_service_info(
+    config: ConfigDependency, logger: LoggerDependency, request: Request, response: Response
+) -> dict:
+    accept_header: str | None = request.headers.get("Accept", None)
+    if accept_header and accept_header not in (
+        REFGET_HEADER_JSON_WITH_CHARSET,
+        REFGET_HEADER_JSON,
+        "application/json",
+        "application/*",
+        "*/*",
+    ):
+        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Not Acceptable")
+
+    response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
+
+    genome_service_info: GA4GHServiceInfo = await build_service_info_from_pydantic_config(
+        config, logger, {}, build_service_type("org.ga4gh", "refget", REFGET_VERSION), __version__
+    )
+
+    del genome_service_info["bento"]
+
+    return {
+        **genome_service_info,
+        "refget": {
+            "circular_supported": False,
+            # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
+            # It's a substring!
+            "subsequence_limit": config.response_substring_limit,
+            "algorithms": ["md5", "ga4gh"],
+            "identifier_types": [],
+        },
+    }
+
+
 @refget_router.get("/{sequence_checksum}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def refget_sequence(
     config: ConfigDependency,
@@ -223,25 +258,3 @@ async def refget_sequence_metadata(
             aliases=contig.aliases,
         ),
     )
-
-
-@refget_router.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
-async def refget_service_info(config: ConfigDependency, logger: LoggerDependency, response: Response) -> dict:
-    response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
-
-    genome_service_info: GA4GHServiceInfo = await build_service_info_from_pydantic_config(
-        config, logger, {}, build_service_type("org.ga4gh", "refget", REFGET_VERSION), __version__
-    )
-
-    del genome_service_info["bento"]
-
-    return {
-        **genome_service_info,
-        "refget": {
-            "circular_supported": False,
-            "algorithms": ["md5", "ga4gh"],
-            # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
-            # It's a substring!
-            "subsequence_limit": config.response_substring_limit,
-        },
-    }

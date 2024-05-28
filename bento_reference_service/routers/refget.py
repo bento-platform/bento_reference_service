@@ -122,7 +122,7 @@ async def refget_sequence(
     contig_fai = parsed_fai_data[contig.name]  # TODO: handle lookup error
 
     start_final: int = 0  # 0-based, inclusive
-    end_final: int = contig.length  # 0-based, exclusive - need to adjust range (which is inclusive)
+    end_final: int = contig.length  # 0-based, exclusive
 
     if start is not None:
         start_final = start
@@ -141,7 +141,7 @@ async def refget_sequence(
         # The pattern-matching above should make these int-casts safe to do, i.e., they won't throw ValueError.
         start_final = int(range_header_match.group(1))
         if end_val := range_header_match.group(2):
-            end_final = int(end_val) + 1  # range is inclusive, so we have to adjust it to be exclusive
+            end_final = int(end_val) + 1  # range header is inclusive, so we have to adjust it to be exclusive
 
     if start_final > end_final:
         if not contig.circular:

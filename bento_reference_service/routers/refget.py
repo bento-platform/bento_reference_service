@@ -12,6 +12,7 @@ from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..constants import RANGE_HEADER_PATTERN
 from ..db import DatabaseDependency
+from ..fai import parse_fai
 from ..logger import LoggerDependency
 from ..models import Alias
 from ..streaming import stream_from_uri
@@ -28,23 +29,6 @@ REFGET_HEADER_JSON = f"application/vnd.ga4gh.refget.v{REFGET_VERSION}+json"
 REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
 
 refget_router = APIRouter(prefix="/sequence")
-
-
-def parse_fai(fai_data: bytes) -> dict[str, tuple[int, int, int, int]]:
-    res: dict[str, tuple[int, int, int, int]] = {}
-
-    for record in fai_data.split(b"\n"):
-        if not record:  # trailing newline or whatever
-            continue
-
-        row = record.split(b"\t")
-        if len(row) != 5:
-            raise ValueError(f"Invalid FAI record: {record.decode('ascii')}")
-
-        # FAI record: contig, (num bases, byte index, bases per line, bytes per line)
-        res[row[0].decode("ascii")] = (int(row[1]), int(row[2]), int(row[3]), int(row[4]))
-
-    return res
 
 
 @refget_router.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])

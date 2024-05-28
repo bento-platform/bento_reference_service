@@ -12,7 +12,7 @@ LABEL devcontainer.metadata='[{ \
 }]'
 
 # FastAPI uses uvicorn for a development server as well
-RUN pip install --upgrade pip && pip install --no-cache-dir "uvicorn[standard]==0.29.0"
+RUN pip install --upgrade pip && pip install --no-cache-dir "uvicorn[standard]==0.30.0"
 WORKDIR /reference
 
 COPY pyproject.toml .

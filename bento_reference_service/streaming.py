@@ -65,6 +65,12 @@ async def stream_file(
     end: int | None,
     yield_content_length_as_first_8: bool = False,
 ):
+    """
+    Stream the contents of a file, optionally yielding the content length as the first 8 bytes of the stream.
+    Coordinate parameters are 0-based and inclusive, e.g., 0-10 yields the first 11 bytes. This matches the format of
+    HTTP range headers.
+    """
+
     file_size = (await aiofiles.os.stat(path)).st_size
     chunk_size = config.file_response_chunk_size
 

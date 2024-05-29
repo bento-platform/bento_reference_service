@@ -8,14 +8,13 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from .. import models, __version__
+from .. import models, streaming as s, __version__
 from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..db import DatabaseDependency
 from ..fai import parse_fai
 from ..logger import LoggerDependency
 from ..models import Alias
-from ..streaming import stream_from_uri
 
 
 __all__ = [
@@ -116,7 +115,7 @@ async def refget_sequence(
 
     # Fetch FAI so we can index into FASTA, properly translating the range header for the contig along the way.
     with io.BytesIO() as fb:
-        _, _, stream = await stream_from_uri(config, logger, genome.fai, None, impose_response_limit=False)
+        _, _, stream = await s.stream_from_uri(config, logger, genome.fai, None, impose_response_limit=False)
         async for chunk in stream:
             fb.write(chunk)
         fb.seek(0)
@@ -137,15 +136,17 @@ async def refget_sequence(
         headers["Accept-Ranges"] = "none"
 
     if range_header is not None:
-        range_header_match = RANGE_HEADER_PATTERN.match(range_header)
-        if not range_header_match:
-            logger.error("bad request: bad range (no match)")
+        try:
+            intervals = s.parse_range_header(range_header, contig.length, refget_mode=True)
+        except s.StreamingBadRange as e:
+            logger.error(f"bad request: bad range - {e}")
             return REFGET_BAD_REQUEST
+        except s.StreamingRangeNotSatisfiable as e:
+            logger.error(f"range not satisfiable: {e}")
+            return REFGET_RANGE_NOT_SATISFIABLE
 
-        # The pattern-matching above should make these int-casts safe to do, i.e., they won't throw ValueError.
-        start_final = int(range_header_match.group(1))
-        if end_val := range_header_match.group(2):
-            end_final = int(end_val) + 1  # range header is inclusive, so we have to adjust it to be exclusive
+        start_final = intervals[0][0]
+        end_final = intervals[0][1] + 1  # range header is inclusive, so we have to adjust it to be exclusive
 
     if start_final > end_final:
         if not contig.circular:
@@ -154,7 +155,7 @@ async def refget_sequence(
         else:
             raise NotImplementedError()  # TODO: support circular contig querying
 
-    # Final bounds-checking
+    # Final bounds-checking - needed for if we're using query parameters
     if start_final >= contig.length:
         # start is 0-based; so if it's set to contig.length or more, it is out of range.
         logger.error("bad request: start cannot be past the end of the sequence")
@@ -170,15 +171,15 @@ async def refget_sequence(
 
     end_final_inclusive: int = end_final - 1  # 0-based, inclusive-indexed
 
+    # Set content length and range based on final start/end values
+    headers["Content-Length"] = str(end_final - start_final)
+    headers["Content-Range"] = f"bytes {start_final}-{end_final_inclusive}/{contig.length}"
+
     # Translate contig fetch into FASTA fetch using FAI data:
     #  - since FASTAs can have newlines, we need to account for the difference between bytes requested + the bases we
     #    return
 
     fai_n_bases, fai_byte_offset, fai_bases_per_line, fai_bytes_per_line_with_newlines = contig_fai
-
-    # Set content length and range based on final start/end values
-    headers["Content-Length"] = str(end_final - start_final)
-    headers["Content-Range"] = f"bytes {start_final}-{end_final_inclusive}/{fai_n_bases}"
 
     newline_bytes_per_line = fai_bytes_per_line_with_newlines - fai_bases_per_line
     n_newline_bytes_before_start = int(math.floor(start_final / fai_bases_per_line)) * newline_bytes_per_line
@@ -189,7 +190,7 @@ async def refget_sequence(
 
     fasta_range_header = f"bytes={fasta_start_byte}-{fasta_end_byte}"
 
-    _, _, fasta_stream = await stream_from_uri(
+    _, _, fasta_stream = await s.stream_from_uri(
         config, logger, genome.fasta, fasta_range_header, impose_response_limit=True
     )
 

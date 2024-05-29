@@ -64,7 +64,9 @@ def tcp_connector(config: Config) -> aiohttp.TCPConnector:
     return aiohttp.TCPConnector(ssl=config.bento_validate_ssl)
 
 
-def parse_range_header(range_header: str | None, content_length: int) -> tuple[tuple[int, int], ...]:
+def parse_range_header(
+    range_header: str | None, content_length: int, refget_mode: bool = False
+) -> tuple[tuple[int, int], ...]:
     """
     Parse a range header (given a particular content length) into a validated series of sorted, non-overlapping
     start/end-inclusive intervals.
@@ -92,7 +94,7 @@ def parse_range_header(range_header: str | None, content_length: int) -> tuple[t
         elif m := BYTE_RANGE_SUFFIX.match(iv):
             inclusive_content_length = content_length - 1
             suffix_length = int(m.group(1))
-            intervals.append((inclusive_content_length - suffix_length, inclusive_content_length))
+            intervals.append((max(inclusive_content_length - suffix_length, 0), inclusive_content_length))
         else:
             raise StreamingBadRange("byte range did not match any pattern")
 
@@ -108,26 +110,27 @@ def parse_range_header(range_header: str | None, content_length: int) -> tuple[t
 
         if int1_start >= content_length:
             # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
+            if refget_mode:  # sigh... GA4GH moment
+                raise StreamingBadRange(f"start is beyond content length: {int1_start} >= {content_length}")
             raise StreamingRangeNotSatisfiable(
-                f"Range not satisfiable: {int1_start} >= {content_length}", content_length
+                f"not satisfiable: {int1_start} >= {content_length}", content_length
             )
-
-        if int1_start < 0:
-            raise StreamingRangeNotSatisfiable(f"Range not satisfiable: {int1_start} < 0", content_length)
 
         if int1_end >= content_length:
             # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
-            raise StreamingRangeNotSatisfiable(f"Range not satisfiable: {int1_end} >= {content_length}", content_length)
+            if refget_mode:  # sigh... GA4GH moment
+                raise StreamingBadRange(f"end is beyond content length: {int1_end} >= {content_length}")
+            raise StreamingRangeNotSatisfiable(f"not satisfiable: {int1_end} >= {content_length}", content_length)
 
-        if int1_start > int1_end:
-            raise StreamingBadRange(f"inverted interval: {int1}")
+        if not refget_mode and int1_start > int1_end:
+            raise StreamingRangeNotSatisfiable(f"inverted interval: {int1}", content_length)
 
         if i < n_intervals - 1:
             int2 = intervals[i + 1]
             int2_start, int2_end = int2
 
             if int1_end >= int2_start:
-                raise StreamingBadRange(f"intervals overlap: {int1}, {int2}")
+                raise StreamingRangeNotSatisfiable(f"intervals overlap: {int1}, {int2}", content_length)
 
     return tuple(intervals)
 

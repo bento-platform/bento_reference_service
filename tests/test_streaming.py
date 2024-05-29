@@ -19,16 +19,15 @@ logger = logging.getLogger(__name__)
     [
         ("bites=0-100", s.StreamingBadRange),
         ("bytes=500", s.StreamingBadRange),
-        ("bytes=100-0", s.StreamingBadRange),
+        ("bytes=100-0", s.StreamingRangeNotSatisfiable),
         ("bytes=abc-", s.StreamingBadRange),
         ("bytes=-10-20", s.StreamingBadRange),
         ("bytes=5bc-600", s.StreamingBadRange),
-        ("bytes=0-50,100-0", s.StreamingBadRange),  # terminal inverted range
-        ("bytes=0-50,30-100", s.StreamingBadRange),  # don't support overlapping ranges
-        ("bytes=0-30,30-100", s.StreamingBadRange),  # don't support overlapping ranges (note inclusive ranges)
-        ("bytes=0-30,35-33,40-100", s.StreamingBadRange),  # non-terminal inverted range
+        ("bytes=0-50,100-0", s.StreamingRangeNotSatisfiable),  # terminal inverted range
+        ("bytes=0-50,30-100", s.StreamingRangeNotSatisfiable),  # don't support overlapping ranges
+        ("bytes=0-30,30-100", s.StreamingRangeNotSatisfiable),  # don't support overlapping ranges (note inclusive)
+        ("bytes=0-30,35-33,40-100", s.StreamingRangeNotSatisfiable),  # non-terminal inverted range
         ("bytes=100000-", s.StreamingRangeNotSatisfiable),  # past end of file
-        ("bytes=-100000", s.StreamingRangeNotSatisfiable),  # past end of file
     ],
 )
 def test_parse_range_header(range_header: str, exc: Type[Exception]):
@@ -72,6 +71,7 @@ with open(SARS_COV_2_FASTA_PATH, "rb") as cfh:
         ("bytes=0-2, 5-5", b">MN", 3),  # TODO: ignores everything except first range
         ("bytes=0-2, 5-5, -5", b">MN", 3),  # TODO: ignores everything except first range
         ("bytes=-5", b"AAAAA\n", 6),
+        ("bytes=-1000000", COVID_FASTA_BYTES, None),
     ],
 )
 @pytest.mark.asyncio()
@@ -101,7 +101,7 @@ async def test_file_streaming_range_errors():
         stream = s.stream_file(c.get_config(), SARS_COV_2_FASTA_PATH, "bytes=0-10000000000")  # past EOF
         await anext(stream)
 
-    with pytest.raises(s.StreamingBadRange):
+    with pytest.raises(s.StreamingRangeNotSatisfiable):
         stream = s.stream_file(c.get_config(), SARS_COV_2_FASTA_PATH, "bytes=10000-5000")  # start > end
         await anext(stream)
 

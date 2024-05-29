@@ -130,7 +130,7 @@ async def test_genome_features_summary(db: Database, db_cleanup):
     ],
 )
 async def test_query_genome_features(db: Database, db_cleanup, genome_id: str, args: dict, n_results: int):
-    await (GENOME_ID_TO_SET_UP_FN[genome_id])(db, logging.getLogger(__name__))
+    await GENOME_ID_TO_SET_UP_FN[genome_id](db, logging.getLogger(__name__))
     res, page = await db.query_genome_features(genome_id, **args)
     assert len(res) == n_results
     assert page["total"] == n_results

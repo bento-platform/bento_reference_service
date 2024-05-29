@@ -4,6 +4,7 @@ import aiohttp
 import json
 import logging
 import pathlib
+import re
 
 from bento_lib.drs.utils import decode_drs_uri
 from fastapi import HTTPException, status
@@ -12,9 +13,9 @@ from typing import AsyncIterator
 from urllib.parse import urlparse
 
 from bento_reference_service.config import Config
-from bento_reference_service.constants import RANGE_HEADER_PATTERN
 
 __all__ = [
+    "parse_range_header",
     "StreamingRangeNotSatisfiable",
     "stream_from_uri",
     "generate_uri_streaming_response",
@@ -22,6 +23,11 @@ __all__ = [
 
 
 ACCEPT_BYTE_RANGES = {"Accept-Ranges": "bytes"}
+
+BYTE_RANGE_INTERVAL_SPLIT = re.compile(r",\s*")
+BYTE_RANGE_START_ONLY = re.compile(r"^(\d+)-$")
+BYTE_RANGE_START_END = re.compile(r"^(\d+)-(\d+)$")
+BYTE_RANGE_SUFFIX = re.compile(r"^-(\d+)$")
 
 
 class StreamingRangeNotSatisfiable(Exception):
@@ -58,11 +64,79 @@ def tcp_connector(config: Config) -> aiohttp.TCPConnector:
     return aiohttp.TCPConnector(ssl=config.bento_validate_ssl)
 
 
+def parse_range_header(
+    range_header: str | None, content_length: int, refget_mode: bool = False
+) -> tuple[tuple[int, int], ...]:
+    """
+    Parse a range header (given a particular content length) into a validated series of sorted, non-overlapping
+    start/end-inclusive intervals.
+    """
+
+    if range_header is None:
+        return ((0, content_length),)
+
+    intervals: list[tuple[int, int]] = []
+
+    if not range_header.startswith("bytes="):
+        raise StreamingBadRange("only bytes range headers are supported")
+
+    intervals_str = range_header.removeprefix("bytes=")
+
+    # Cases: start- | start-end | -suffix, [start- | start-end | -suffix], ...
+
+    intervals_str_split = BYTE_RANGE_INTERVAL_SPLIT.split(intervals_str)
+
+    for iv in intervals_str_split:
+        if m := BYTE_RANGE_START_ONLY.match(iv):
+            intervals.append((int(m.group(1)), content_length - 1))
+        elif m := BYTE_RANGE_START_END.match(iv):
+            intervals.append((int(m.group(1)), int(m.group(2))))
+        elif m := BYTE_RANGE_SUFFIX.match(iv):
+            inclusive_content_length = content_length - 1
+            suffix_length = int(m.group(1))  # suffix: -500 === last 500:
+            intervals.append((max(inclusive_content_length - suffix_length + 1, 0), inclusive_content_length))
+        else:
+            raise StreamingBadRange("byte range did not match any pattern")
+
+    intervals.sort()
+    n_intervals: int = len(intervals)
+
+    # validate intervals are not inverted and do not overlap each other:
+    for i, int1 in enumerate(intervals):
+        int1_start, int1_end = int1
+
+        # Order of these checks is important - we want to give a 416 if start/end is beyond content length (which also
+        # results in an inverted interval)
+
+        if int1_start >= content_length:
+            # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
+            if refget_mode:  # sigh... GA4GH moment
+                raise StreamingBadRange(f"start is beyond content length: {int1_start} >= {content_length}")
+            raise StreamingRangeNotSatisfiable(f"not satisfiable: {int1_start} >= {content_length}", content_length)
+
+        if int1_end >= content_length:
+            # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
+            if refget_mode:  # sigh... GA4GH moment
+                raise StreamingBadRange(f"end is beyond content length: {int1_end} >= {content_length}")
+            raise StreamingRangeNotSatisfiable(f"not satisfiable: {int1_end} >= {content_length}", content_length)
+
+        if not refget_mode and int1_start > int1_end:
+            raise StreamingRangeNotSatisfiable(f"inverted interval: {int1}", content_length)
+
+        if i < n_intervals - 1:
+            int2 = intervals[i + 1]
+            int2_start, int2_end = int2
+
+            if int1_end >= int2_start:
+                raise StreamingRangeNotSatisfiable(f"intervals overlap: {int1}, {int2}", content_length)
+
+    return tuple(intervals)
+
+
 async def stream_file(
     config: Config,
     path: pathlib.Path,
-    start: int,
-    end: int | None,
+    range_header: str | None,
     yield_content_length_as_first_8: bool = False,
 ):
     """
@@ -72,17 +146,18 @@ async def stream_file(
     """
 
     file_size = (await aiofiles.os.stat(path)).st_size
-    chunk_size = config.file_response_chunk_size
+    intervals = parse_range_header(range_header, file_size)
 
-    if start >= file_size or (end is not None and end >= file_size):
-        # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at file_size - 1
-        raise StreamingRangeNotSatisfiable(f"Range not satisfiable while streaming {path}", file_size)
+    # for now, only support returning a single range of bytes; take the start and end from the first interval given:
+    start, end = intervals[0]
+    response_size: int = end - start + 1
 
-    if end is not None and (start > end):
-        raise StreamingBadRange()
+    # TODO: support multipart/byterange responses
 
     if yield_content_length_as_first_8:
-        yield file_size.to_bytes(8, "big")
+        yield response_size.to_bytes(8, "big")
+
+    chunk_size = config.file_response_chunk_size
 
     async with aiofiles.open(path, "rb") as ff:
         # Logic mostly ported from bento_drs
@@ -93,19 +168,14 @@ async def stream_file(
         byte_offset: int = start
         while True:
             # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
-            data = await ff.read(
-                min(
-                    chunk_size,
-                    (end + 1 - byte_offset) if end is not None else chunk_size,
-                )
-            )
+            data = await ff.read(min(chunk_size, end + 1 - byte_offset))
             byte_offset += len(data)
             yield data
 
             # If we've hit the end of the file and are reading empty byte strings, or we've reached the
             # end of our range (inclusive), then escape the loop.
             # This is guaranteed to terminate with a finite-sized file.
-            if not data or (end is not None and byte_offset > end):
+            if not data or byte_offset > end:
                 break
 
 
@@ -113,7 +183,8 @@ async def stream_http(
     config: Config,
     url: str,
     headers: dict[str, str],
-    yield_content_length_as_first_8: bool = False,
+    yield_status_as_first_2: bool = False,
+    yield_content_length_as_next_8: bool = False,
 ) -> AsyncIterator[bytes]:
     async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
         async with session.get(url, headers=headers) as res:
@@ -127,10 +198,14 @@ async def stream_http(
                 err_content = (await res.content.read()).decode("utf-8")
                 raise StreamingProxyingError(f"Error while streaming {url}: {res.status} {err_content}")
 
-            if yield_content_length_as_first_8:
+            if yield_status_as_first_2:
+                yield res.status.to_bytes(2, "big")
+
+            if yield_content_length_as_next_8:
                 if "Content-Length" not in res.headers:
                     raise StreamingProxyingError(f"Error while streaming {url}: missing Content-Length header")
                 yield int(res.headers["Content-Length"]).to_bytes(8, "big")
+
             async for chunk in res.content.iter_chunked(config.file_response_chunk_size):
                 yield chunk
 
@@ -162,7 +237,7 @@ async def drs_bytes_url_from_uri(config: Config, logger: logging.Logger, drs_uri
 
 async def stream_from_uri(
     config: Config, logger: logging.Logger, original_uri: str, range_header: str | None, impose_response_limit: bool
-) -> tuple[int, AsyncIterator[bytes]]:
+) -> tuple[int, int, AsyncIterator[bytes]]:
     stream: AsyncIterator[bytes]
 
     try:
@@ -172,24 +247,10 @@ async def stream_from_uri(
 
     match parsed_uri.scheme:
         case "file":
-            start: int = 0
-            end: int | None = None
-
-            if range_header:
-                range_header_match = RANGE_HEADER_PATTERN.match(range_header)
-                if not range_header_match:
-                    raise StreamingBadRange()
-
-                try:
-                    start = int(range_header_match.group(1))
-                    end_val = range_header_match.group(2)
-                    end = end_val if end_val is None else int(end_val)
-                except ValueError:
-                    raise StreamingBadRange()
-
             stream = stream_file(
-                config, pathlib.Path(parsed_uri.path), start, end, yield_content_length_as_first_8=True
+                config, pathlib.Path(parsed_uri.path), range_header, yield_content_length_as_first_8=True
             )
+            status_code = status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK
 
         case "drs" | "http" | "https":
             # Proxy request to HTTP(S) URL, but override media type
@@ -207,13 +268,15 @@ async def stream_from_uri(
                 config,
                 url,
                 headers={"Range": range_header} if range_header else {},
-                yield_content_length_as_first_8=True,
+                yield_status_as_first_2=True,
+                yield_content_length_as_next_8=True,
             )
+            status_code = int.from_bytes(await anext(stream), "big")  # 2 bytes specifying status code
 
         case _:
             raise StreamingUnsupportedURIScheme(parsed_uri.scheme)
 
-    # Content length should be the first 8 bytes of the stream
+    # Content length should be the next 8 bytes of the stream
     content_length = int.from_bytes(await anext(stream), "big")
 
     if impose_response_limit and content_length > config.response_substring_limit:
@@ -223,7 +286,7 @@ async def stream_from_uri(
         async for chunk in stream:
             yield chunk
 
-    return content_length, _agen()
+    return content_length, status_code, _agen()
 
 
 async def generate_uri_streaming_response(
@@ -237,7 +300,9 @@ async def generate_uri_streaming_response(
     extra_response_headers: dict[str, str] | None = None,
 ):
     try:
-        content_length, stream = await stream_from_uri(config, logger, uri, range_header, impose_response_limit)
+        content_length, status_code, stream = await stream_from_uri(
+            config, logger, uri, range_header, impose_response_limit
+        )
         return StreamingResponse(
             stream,
             headers={
@@ -246,7 +311,7 @@ async def generate_uri_streaming_response(
                 "Content-Length": str(content_length),
             },
             media_type=media_type,
-            status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
+            status_code=status_code,
         )
     except StreamingRangeNotSatisfiable as e:
         raise HTTPException(

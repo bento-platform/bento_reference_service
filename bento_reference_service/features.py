@@ -269,7 +269,7 @@ async def ingest_features(
 async def download_uri_into_temporary_file(uri: str, tmp: Path, config: Config, logger: logging.Logger):
     logger.debug(f"Saving data from URI {uri} into temporary file {tmp}")
 
-    _, stream_iter = await stream_from_uri(config, logger, uri, range_header=None, impose_response_limit=False)
+    _, _, stream_iter = await stream_from_uri(config, logger, uri, range_header=None, impose_response_limit=False)
 
     # copy .gff3.gz to temporary directory for ingestion
     async with aiofiles.open(tmp, "wb") as fh:

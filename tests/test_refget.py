@@ -124,6 +124,7 @@ def test_refget_sequence_partial(test_client, aioresponse: aioresponses, db_clea
     # Load COVID contig bytes
     rf = pysam.FastaFile(str(SARS_COV_2_FASTA_PATH))
     seq = rf.fetch(test_contig["name"]).encode("ascii")
+    seq_len = len(seq)
 
     # ------------------------------------------------------------------------------------------------------------------
 
@@ -133,6 +134,7 @@ def test_refget_sequence_partial(test_client, aioresponse: aioresponses, db_clea
         assert r.status_code == sc
         assert r.headers["Accept-Ranges"] == ar
         assert r.headers["Content-Length"] == "10"
+        assert r.headers["Content-Range"] == f"bytes 0-9/{seq_len}"
         assert r.content == seq[:10]
 
     res = test_client.get(seq_url, params={"start": "0", "end": "10"}, headers=HEADERS_ACCEPT_PLAIN)
@@ -153,4 +155,9 @@ def test_refget_sequence_partial(test_client, aioresponse: aioresponses, db_clea
 
     res = test_client.get(seq_url, headers={"Range": "bytes=10-", **HEADERS_ACCEPT_PLAIN})
     assert res.status_code == status.HTTP_206_PARTIAL_CONTENT
+    assert res.headers["Content-Range"] == f"bytes 10-{seq_len-1}/{seq_len}"
     assert res.content == seq[10:]
+
+    res = test_client.get(seq_url, headers={"Range": "bytes=-10", **HEADERS_ACCEPT_PLAIN})
+    assert res.status_code == status.HTTP_206_PARTIAL_CONTENT
+    assert res.content == seq[-10:]

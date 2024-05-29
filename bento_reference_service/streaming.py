@@ -145,12 +145,14 @@ async def stream_file(
     """
 
     file_size = (await aiofiles.os.stat(path)).st_size
-    chunk_size = config.file_response_chunk_size
+    intervals = parse_range_header(range_header, file_size)
+
+    response_size: int = sum(end - start + 1 for start, end in intervals)
 
     if yield_content_length_as_first_8:
-        yield file_size.to_bytes(8, "big")
+        yield response_size.to_bytes(8, "big")
 
-    intervals = parse_range_header(range_header, file_size)
+    chunk_size = config.file_response_chunk_size
 
     async with aiofiles.open(path, "rb") as ff:
         for start, end in intervals:

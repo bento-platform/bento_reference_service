@@ -59,27 +59,35 @@ async def test_file_streaming():
         assert isinstance(chunk, bytes)
 
 
-with open(SARS_COV_2_FASTA_PATH, "rb") as fh:
-    COVID_FASTA_BYTES = fh.read()
+with open(SARS_COV_2_FASTA_PATH, "rb") as cfh:
+    COVID_FASTA_BYTES = cfh.read()
 
 
 @pytest.mark.parametrize(
-    "range_header,expected",
+    "range_header,expected,size",
     [
-        ("bytes=0-10", b">MN908947.3"),
-        ("bytes=5-10", b"8947.3"),
-        ("bytes=10-", COVID_FASTA_BYTES[10:]),
-        ("bytes=0-2, 5-5", b">MN8"),
-        ("bytes=0-2, 5-5, -5", b">MN8AAAAA\n"),
-        ("bytes=-5", b"AAAAA\n"),
+        ("bytes=0-10", b">MN908947.3", 11),
+        ("bytes=5-10", b"8947.3", None),
+        ("bytes=10-", COVID_FASTA_BYTES[10:], None),
+        ("bytes=0-2, 5-5", b">MN8", 4),
+        ("bytes=0-2, 5-5, -5", b">MN8AAAAA\n", 10),
+        ("bytes=-5", b"AAAAA\n", 6),
     ],
 )
 @pytest.mark.asyncio()
-async def test_file_streaming_ranges(range_header: str, expected: bytes):
-    stream = s.stream_file(c.get_config(), SARS_COV_2_FASTA_PATH, range_header)
+async def test_file_streaming_ranges(range_header: str, expected: bytes, size: int | None):
+    stream = s.stream_file(
+        c.get_config(), SARS_COV_2_FASTA_PATH, range_header, yield_content_length_as_first_8=size is not None
+    )
+
+    if size is not None:
+        cl = int.from_bytes(await anext(stream), byteorder="big")
+        assert cl == size
+
     stream_contents = b""
     async for chunk in stream:
         stream_contents += chunk
+
     assert stream_contents == expected
 
 

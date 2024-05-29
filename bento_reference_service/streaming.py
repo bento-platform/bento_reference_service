@@ -4,6 +4,7 @@ import aiohttp
 import json
 import logging
 import pathlib
+import re
 
 from bento_lib.drs.utils import decode_drs_uri
 from fastapi import HTTPException, status
@@ -12,9 +13,9 @@ from typing import AsyncIterator
 from urllib.parse import urlparse
 
 from bento_reference_service.config import Config
-from bento_reference_service.constants import RANGE_HEADER_PATTERN
 
 __all__ = [
+    "parse_range_header",
     "StreamingRangeNotSatisfiable",
     "stream_from_uri",
     "generate_uri_streaming_response",
@@ -22,6 +23,11 @@ __all__ = [
 
 
 ACCEPT_BYTE_RANGES = {"Accept-Ranges": "bytes"}
+
+BYTE_RANGE_INTERVAL_SPLIT = re.compile(r",\s*")
+BYTE_RANGE_START_ONLY = re.compile(r"^(\d+)-$")
+BYTE_RANGE_START_END = re.compile(r"^(\d+)-(\d+)$")
+BYTE_RANGE_SUFFIX = re.compile(r"^-(\d+)$")
 
 
 class StreamingRangeNotSatisfiable(Exception):
@@ -58,11 +64,78 @@ def tcp_connector(config: Config) -> aiohttp.TCPConnector:
     return aiohttp.TCPConnector(ssl=config.bento_validate_ssl)
 
 
+def parse_range_header(range_header: str | None, content_length: int) -> tuple[tuple[int, int], ...]:
+    """
+    Parse a range header (given a particular content length) into a validated series of sorted, non-overlapping
+    start/end-inclusive intervals.
+    """
+
+    if range_header is None:
+        return ((0, content_length),)
+
+    intervals: list[tuple[int, int]] = []
+
+    if not range_header.startswith("bytes="):
+        raise StreamingBadRange("only bytes range headers are supported")
+
+    intervals_str = range_header.removeprefix("bytes=")
+
+    # Cases: start- | start-end | -suffix, [start- | start-end | -suffix], ...
+
+    intervals_str_split = BYTE_RANGE_INTERVAL_SPLIT.split(intervals_str)
+
+    for iv in intervals_str_split:
+        if m := BYTE_RANGE_START_ONLY.match(iv):
+            intervals.append((int(m.group(1)), content_length - 1))
+        elif m := BYTE_RANGE_START_END.match(iv):
+            intervals.append((int(m.group(1)), int(m.group(2))))
+        elif m := BYTE_RANGE_SUFFIX.match(iv):
+            inclusive_content_length = content_length - 1
+            suffix_length = int(m.group(1))
+            intervals.append((inclusive_content_length - suffix_length, inclusive_content_length))
+        else:
+            raise StreamingBadRange("byte range did not match any pattern")
+
+    intervals.sort()
+    n_intervals: int = len(intervals)
+
+    # validate intervals are not inverted and do not overlap each other:
+    for i, int1 in enumerate(intervals):
+        int1_start, int1_end = int1
+
+        # Order of these checks is important - we want to give a 416 if start/end is beyond content length (which also
+        # results in an inverted interval)
+
+        if int1_start >= content_length:
+            # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
+            raise StreamingRangeNotSatisfiable(
+                f"Range not satisfiable: {int1_start} >= {content_length}", content_length
+            )
+
+        if int1_start < 0:
+            raise StreamingRangeNotSatisfiable(f"Range not satisfiable: {int1_start} < 0", content_length)
+
+        if int1_end >= content_length:
+            # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
+            raise StreamingRangeNotSatisfiable(f"Range not satisfiable: {int1_end} >= {content_length}", content_length)
+
+        if int1_start > int1_end:
+            raise StreamingBadRange(f"inverted interval: {int1}")
+
+        if i < n_intervals - 1:
+            int2 = intervals[i + 1]
+            int2_start, int2_end = int2
+
+            if int1_end >= int2_start:
+                raise StreamingBadRange(f"intervals overlap: {int1}, {int2}")
+
+    return tuple(intervals)
+
+
 async def stream_file(
     config: Config,
     path: pathlib.Path,
-    start: int,
-    end: int | None,
+    range_header: str | None,
     yield_content_length_as_first_8: bool = False,
 ):
     """
@@ -74,39 +147,30 @@ async def stream_file(
     file_size = (await aiofiles.os.stat(path)).st_size
     chunk_size = config.file_response_chunk_size
 
-    if start >= file_size or (end is not None and end >= file_size):
-        # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at file_size - 1
-        raise StreamingRangeNotSatisfiable(f"Range not satisfiable while streaming {path}", file_size)
-
-    if end is not None and (start > end):
-        raise StreamingBadRange()
-
     if yield_content_length_as_first_8:
         yield file_size.to_bytes(8, "big")
 
+    intervals = parse_range_header(range_header, file_size)
+
     async with aiofiles.open(path, "rb") as ff:
-        # Logic mostly ported from bento_drs
+        for start, end in intervals:
+            # Logic mostly ported from bento_drs
 
-        # First, skip over <start> bytes to get to the beginning of the range
-        await ff.seek(start)
+            # First, skip over <start> bytes to get to the beginning of the range
+            await ff.seek(start)
 
-        byte_offset: int = start
-        while True:
-            # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
-            data = await ff.read(
-                min(
-                    chunk_size,
-                    (end + 1 - byte_offset) if end is not None else chunk_size,
-                )
-            )
-            byte_offset += len(data)
-            yield data
+            byte_offset: int = start
+            while True:
+                # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
+                data = await ff.read(min(chunk_size, end + 1 - byte_offset))
+                byte_offset += len(data)
+                yield data
 
-            # If we've hit the end of the file and are reading empty byte strings, or we've reached the
-            # end of our range (inclusive), then escape the loop.
-            # This is guaranteed to terminate with a finite-sized file.
-            if not data or (end is not None and byte_offset > end):
-                break
+                # If we've hit the end of the file and are reading empty byte strings, or we've reached the
+                # end of our range (inclusive), then escape the loop.
+                # This is guaranteed to terminate with a finite-sized file.
+                if not data or byte_offset > end:
+                    break
 
 
 async def stream_http(
@@ -172,23 +236,8 @@ async def stream_from_uri(
 
     match parsed_uri.scheme:
         case "file":
-            start: int = 0
-            end: int | None = None
-
-            if range_header:
-                range_header_match = RANGE_HEADER_PATTERN.match(range_header)
-                if not range_header_match:
-                    raise StreamingBadRange()
-
-                try:
-                    start = int(range_header_match.group(1))
-                    end_val = range_header_match.group(2)
-                    end = end_val if end_val is None else int(end_val)
-                except ValueError:
-                    raise StreamingBadRange()
-
             stream = stream_file(
-                config, pathlib.Path(parsed_uri.path), start, end, yield_content_length_as_first_8=True
+                config, pathlib.Path(parsed_uri.path), range_header, yield_content_length_as_first_8=True
             )
 
         case "drs" | "http" | "https":

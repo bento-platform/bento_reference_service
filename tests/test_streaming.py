@@ -70,7 +70,7 @@ with open(SARS_COV_2_FASTA_PATH, "rb") as cfh:
         ("bytes=10-", COVID_FASTA_BYTES[10:], None),
         ("bytes=0-2, 5-5", b">MN", 3),  # TODO: ignores everything except first range
         ("bytes=0-2, 5-5, -5", b">MN", 3),  # TODO: ignores everything except first range
-        ("bytes=-5", b"AAAAA\n", 6),
+        ("bytes=-5", b"AAAA\n", 5),
         ("bytes=-1000000", COVID_FASTA_BYTES, None),
     ],
 )

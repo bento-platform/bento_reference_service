@@ -93,8 +93,8 @@ def parse_range_header(
             intervals.append((int(m.group(1)), int(m.group(2))))
         elif m := BYTE_RANGE_SUFFIX.match(iv):
             inclusive_content_length = content_length - 1
-            suffix_length = int(m.group(1))
-            intervals.append((max(inclusive_content_length - suffix_length, 0), inclusive_content_length))
+            suffix_length = int(m.group(1))  # suffix: -500 === last 500:
+            intervals.append((max(inclusive_content_length - suffix_length + 1, 0), inclusive_content_length))
         else:
             raise StreamingBadRange("byte range did not match any pattern")
 

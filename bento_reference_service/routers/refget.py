@@ -116,7 +116,7 @@ async def refget_sequence(
 
     # Fetch FAI so we can index into FASTA, properly translating the range header for the contig along the way.
     with io.BytesIO() as fb:
-        _, stream = await stream_from_uri(config, logger, genome.fai, None, impose_response_limit=False)
+        _, _, stream = await stream_from_uri(config, logger, genome.fai, None, impose_response_limit=False)
         async for chunk in stream:
             fb.write(chunk)
         fb.seek(0)
@@ -168,8 +168,7 @@ async def refget_sequence(
         logger.error("range not satisfiable: request for too many bytes")
         return REFGET_RANGE_NOT_SATISFIABLE
 
-    # Set content length based on final start/end values
-    headers["Content-Length"] = str(end_final - start_final)
+    end_final_inclusive: int = end_final - 1  # 0-based, inclusive-indexed
 
     # Translate contig fetch into FASTA fetch using FAI data:
     #  - since FASTAs can have newlines, we need to account for the difference between bytes requested + the bases we
@@ -177,7 +176,9 @@ async def refget_sequence(
 
     fai_n_bases, fai_byte_offset, fai_bases_per_line, fai_bytes_per_line_with_newlines = contig_fai
 
-    end_final_inclusive: int = end_final - 1  # 0-based, inclusive-indexed
+    # Set content length and range based on final start/end values
+    headers["Content-Length"] = str(end_final - start_final)
+    headers["Content-Range"] = f"bytes {start_final}-{end_final_inclusive}/{fai_n_bases}"
 
     newline_bytes_per_line = fai_bytes_per_line_with_newlines - fai_bases_per_line
     n_newline_bytes_before_start = int(math.floor(start_final / fai_bases_per_line)) * newline_bytes_per_line
@@ -188,22 +189,16 @@ async def refget_sequence(
 
     fasta_range_header = f"bytes={fasta_start_byte}-{fasta_end_byte}"
 
-    _, fasta_stream = await stream_from_uri(
-        config,
-        logger,
-        genome.fasta,
-        fasta_range_header,
-        impose_response_limit=True,
+    _, _, fasta_stream = await stream_from_uri(
+        config, logger, genome.fasta, fasta_range_header, impose_response_limit=True
     )
 
     async def _format_response():
         async for fasta_chunk in fasta_stream:
             yield fasta_chunk.replace(b"\n", b"").replace(b"\r", b"")
 
-    stream = _format_response()
-
     return StreamingResponse(
-        stream,
+        _format_response(),
         headers=headers,
         media_type="text/x-fasta",
         status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,

@@ -147,7 +147,11 @@ async def stream_file(
     file_size = (await aiofiles.os.stat(path)).st_size
     intervals = parse_range_header(range_header, file_size)
 
-    response_size: int = sum(end - start + 1 for start, end in intervals)
+    # for now, only support returning a single range of bytes; take the start and end from the first interval given:
+    start, end = intervals[0]
+    response_size: int = end - start + 1
+
+    # TODO: support multipart/byterange responses
 
     if yield_content_length_as_first_8:
         yield response_size.to_bytes(8, "big")
@@ -155,31 +159,31 @@ async def stream_file(
     chunk_size = config.file_response_chunk_size
 
     async with aiofiles.open(path, "rb") as ff:
-        for start, end in intervals:
-            # Logic mostly ported from bento_drs
+        # Logic mostly ported from bento_drs
 
-            # First, skip over <start> bytes to get to the beginning of the range
-            await ff.seek(start)
+        # First, skip over <start> bytes to get to the beginning of the range
+        await ff.seek(start)
 
-            byte_offset: int = start
-            while True:
-                # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
-                data = await ff.read(min(chunk_size, end + 1 - byte_offset))
-                byte_offset += len(data)
-                yield data
+        byte_offset: int = start
+        while True:
+            # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
+            data = await ff.read(min(chunk_size, end + 1 - byte_offset))
+            byte_offset += len(data)
+            yield data
 
-                # If we've hit the end of the file and are reading empty byte strings, or we've reached the
-                # end of our range (inclusive), then escape the loop.
-                # This is guaranteed to terminate with a finite-sized file.
-                if not data or byte_offset > end:
-                    break
+            # If we've hit the end of the file and are reading empty byte strings, or we've reached the
+            # end of our range (inclusive), then escape the loop.
+            # This is guaranteed to terminate with a finite-sized file.
+            if not data or byte_offset > end:
+                break
 
 
 async def stream_http(
     config: Config,
     url: str,
     headers: dict[str, str],
-    yield_content_length_as_first_8: bool = False,
+    yield_status_as_first_2: bool = False,
+    yield_content_length_as_next_8: bool = False,
 ) -> AsyncIterator[bytes]:
     async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
         async with session.get(url, headers=headers) as res:
@@ -193,10 +197,14 @@ async def stream_http(
                 err_content = (await res.content.read()).decode("utf-8")
                 raise StreamingProxyingError(f"Error while streaming {url}: {res.status} {err_content}")
 
-            if yield_content_length_as_first_8:
+            if yield_status_as_first_2:
+                yield res.status.to_bytes(2, "big")
+
+            if yield_content_length_as_next_8:
                 if "Content-Length" not in res.headers:
                     raise StreamingProxyingError(f"Error while streaming {url}: missing Content-Length header")
                 yield int(res.headers["Content-Length"]).to_bytes(8, "big")
+
             async for chunk in res.content.iter_chunked(config.file_response_chunk_size):
                 yield chunk
 
@@ -228,7 +236,7 @@ async def drs_bytes_url_from_uri(config: Config, logger: logging.Logger, drs_uri
 
 async def stream_from_uri(
     config: Config, logger: logging.Logger, original_uri: str, range_header: str | None, impose_response_limit: bool
-) -> tuple[int, AsyncIterator[bytes]]:
+) -> tuple[int, int, AsyncIterator[bytes]]:
     stream: AsyncIterator[bytes]
 
     try:
@@ -241,6 +249,7 @@ async def stream_from_uri(
             stream = stream_file(
                 config, pathlib.Path(parsed_uri.path), range_header, yield_content_length_as_first_8=True
             )
+            status_code = status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK
 
         case "drs" | "http" | "https":
             # Proxy request to HTTP(S) URL, but override media type
@@ -258,13 +267,15 @@ async def stream_from_uri(
                 config,
                 url,
                 headers={"Range": range_header} if range_header else {},
-                yield_content_length_as_first_8=True,
+                yield_status_as_first_2=True,
+                yield_content_length_as_next_8=True,
             )
+            status_code = int.from_bytes(await anext(stream), "big")  # 2 bytes specifying status code
 
         case _:
             raise StreamingUnsupportedURIScheme(parsed_uri.scheme)
 
-    # Content length should be the first 8 bytes of the stream
+    # Content length should be the next 8 bytes of the stream
     content_length = int.from_bytes(await anext(stream), "big")
 
     if impose_response_limit and content_length > config.response_substring_limit:
@@ -274,7 +285,7 @@ async def stream_from_uri(
         async for chunk in stream:
             yield chunk
 
-    return content_length, _agen()
+    return content_length, status_code, _agen()
 
 
 async def generate_uri_streaming_response(
@@ -288,7 +299,9 @@ async def generate_uri_streaming_response(
     extra_response_headers: dict[str, str] | None = None,
 ):
     try:
-        content_length, stream = await stream_from_uri(config, logger, uri, range_header, impose_response_limit)
+        content_length, status_code, stream = await stream_from_uri(
+            config, logger, uri, range_header, impose_response_limit
+        )
         return StreamingResponse(
             stream,
             headers={
@@ -297,7 +310,7 @@ async def generate_uri_streaming_response(
                 "Content-Length": str(content_length),
             },
             media_type=media_type,
-            status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
+            status_code=status_code,
         )
     except StreamingRangeNotSatisfiable as e:
         raise HTTPException(

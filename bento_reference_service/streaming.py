@@ -112,9 +112,7 @@ def parse_range_header(
             # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
             if refget_mode:  # sigh... GA4GH moment
                 raise StreamingBadRange(f"start is beyond content length: {int1_start} >= {content_length}")
-            raise StreamingRangeNotSatisfiable(
-                f"not satisfiable: {int1_start} >= {content_length}", content_length
-            )
+            raise StreamingRangeNotSatisfiable(f"not satisfiable: {int1_start} >= {content_length}", content_length)
 
         if int1_end >= content_length:
             # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1

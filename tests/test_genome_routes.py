@@ -36,18 +36,21 @@ async def test_genome_list(test_client: TestClient):
     assert res.content == b"[]"  # empty json list
 
 
-@pytest.mark.parametrize("endpoint", (
-    "/genomes/hg19",
-    "/genomes/hg19/contigs",
-    "/genomes/hg19/contigs/chr1",
-    "/genomes/hg19.fa",
-    "/genomes/hg19.fa.fai",
-    "/genomes/hg19/features",
-    "/genomes/hg19/features/1",
-    "/genomes/hg19/features.gff3.gz",
-    "/genomes/hg19/features.gff3.gz.tbi",
-    "/genomes/hg19/igv-js-features",
-))
+@pytest.mark.parametrize(
+    "endpoint",
+    (
+        "/genomes/hg19",
+        "/genomes/hg19/contigs",
+        "/genomes/hg19/contigs/chr1",
+        "/genomes/hg19.fa",
+        "/genomes/hg19.fa.fai",
+        "/genomes/hg19/features",
+        "/genomes/hg19/features/1",
+        "/genomes/hg19/features.gff3.gz",
+        "/genomes/hg19/features.gff3.gz.tbi",
+        "/genomes/hg19/igv-js-features",
+    ),
+)
 async def test_get_404s_with_no_genomes(test_client: TestClient, endpoint: str):
     assert test_client.get(endpoint).status_code == status.HTTP_404_NOT_FOUND
 

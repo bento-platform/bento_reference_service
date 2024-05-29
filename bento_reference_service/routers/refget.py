@@ -1,6 +1,5 @@
 import io
 import math
-import re
 
 from bento_lib.service_info.helpers import build_service_type, build_service_info_from_pydantic_config
 from bento_lib.service_info.types import GA4GHServiceInfo
@@ -28,8 +27,6 @@ REFGET_HEADER_TEXT = f"text/vnd.ga4gh.refget.v{REFGET_VERSION}+plain"
 REFGET_HEADER_TEXT_WITH_CHARSET = f"{REFGET_HEADER_TEXT}; charset=us-ascii"
 REFGET_HEADER_JSON = f"application/vnd.ga4gh.refget.v{REFGET_VERSION}+json"
 REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
-
-RANGE_HEADER_PATTERN = re.compile(r"^bytes=(\d+)-(\d+)?$")
 
 refget_router = APIRouter(prefix="/sequence")
 

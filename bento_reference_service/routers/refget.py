@@ -3,6 +3,7 @@ import math
 
 from bento_lib.service_info.helpers import build_service_type, build_service_info_from_pydantic_config
 from bento_lib.service_info.types import GA4GHServiceInfo
+from bento_lib.streaming import exceptions as se, range as sr
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -134,11 +135,11 @@ async def refget_sequence(
 
     if range_header is not None:
         try:
-            intervals = s.parse_range_header(range_header, contig.length, refget_mode=True)
-        except s.StreamingBadRange as e:
+            intervals = sr.parse_range_header(range_header, contig.length, refget_mode=True)
+        except se.StreamingBadRange as e:
             logger.error(f"bad request: bad range - {e}")
             return REFGET_BAD_REQUEST
-        except s.StreamingRangeNotSatisfiable as e:
+        except se.StreamingRangeNotSatisfiable as e:
             logger.error(f"range not satisfiable: {e}")
             return REFGET_RANGE_NOT_SATISFIABLE
 

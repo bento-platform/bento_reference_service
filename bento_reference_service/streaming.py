@@ -4,9 +4,10 @@ import aiohttp
 import json
 import logging
 import pathlib
-import re
 
 from bento_lib.drs.utils import decode_drs_uri
+from bento_lib.streaming import exceptions as se
+from bento_lib.streaming.range import parse_range_header
 from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 from typing import AsyncIterator
@@ -15,8 +16,6 @@ from urllib.parse import urlparse
 from bento_reference_service.config import Config
 
 __all__ = [
-    "parse_range_header",
-    "StreamingRangeNotSatisfiable",
     "stream_from_uri",
     "generate_uri_streaming_response",
 ]
@@ -24,113 +23,9 @@ __all__ = [
 
 ACCEPT_BYTE_RANGES = {"Accept-Ranges": "bytes"}
 
-BYTE_RANGE_INTERVAL_SPLIT = re.compile(r",\s*")
-BYTE_RANGE_START_ONLY = re.compile(r"^(\d+)-$")
-BYTE_RANGE_START_END = re.compile(r"^(\d+)-(\d+)$")
-BYTE_RANGE_SUFFIX = re.compile(r"^-(\d+)$")
-
-
-class StreamingRangeNotSatisfiable(Exception):
-    def __init__(self, message: str, n_bytes: int | None):
-        self._n_bytes: int | None = n_bytes
-        super().__init__(message)
-
-    @property
-    def n_bytes(self) -> int:
-        return self._n_bytes
-
-
-class StreamingBadRange(Exception):
-    pass
-
-
-class StreamingProxyingError(Exception):
-    pass
-
-
-class StreamingResponseExceededLimit(Exception):
-    pass
-
-
-class StreamingBadURI(Exception):
-    pass
-
-
-class StreamingUnsupportedURIScheme(Exception):
-    pass
-
 
 def tcp_connector(config: Config) -> aiohttp.TCPConnector:
     return aiohttp.TCPConnector(ssl=config.bento_validate_ssl)
-
-
-def parse_range_header(
-    range_header: str | None, content_length: int, refget_mode: bool = False
-) -> tuple[tuple[int, int], ...]:
-    """
-    Parse a range header (given a particular content length) into a validated series of sorted, non-overlapping
-    start/end-inclusive intervals.
-    """
-
-    if range_header is None:
-        return ((0, content_length),)
-
-    intervals: list[tuple[int, int]] = []
-
-    if not range_header.startswith("bytes="):
-        raise StreamingBadRange("only bytes range headers are supported")
-
-    intervals_str = range_header.removeprefix("bytes=")
-
-    # Cases: start- | start-end | -suffix, [start- | start-end | -suffix], ...
-
-    intervals_str_split = BYTE_RANGE_INTERVAL_SPLIT.split(intervals_str)
-
-    for iv in intervals_str_split:
-        if m := BYTE_RANGE_START_ONLY.match(iv):
-            intervals.append((int(m.group(1)), content_length - 1))
-        elif m := BYTE_RANGE_START_END.match(iv):
-            intervals.append((int(m.group(1)), int(m.group(2))))
-        elif m := BYTE_RANGE_SUFFIX.match(iv):
-            inclusive_content_length = content_length - 1
-            suffix_length = int(m.group(1))  # suffix: -500 === last 500:
-            intervals.append((max(inclusive_content_length - suffix_length + 1, 0), inclusive_content_length))
-        else:
-            raise StreamingBadRange("byte range did not match any pattern")
-
-    intervals.sort()
-    n_intervals: int = len(intervals)
-
-    # validate intervals are not inverted and do not overlap each other:
-    for i, int1 in enumerate(intervals):
-        int1_start, int1_end = int1
-
-        # Order of these checks is important - we want to give a 416 if start/end is beyond content length (which also
-        # results in an inverted interval)
-
-        if int1_start >= content_length:
-            # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
-            if refget_mode:  # sigh... GA4GH moment
-                raise StreamingBadRange(f"start is beyond content length: {int1_start} >= {content_length}")
-            raise StreamingRangeNotSatisfiable(f"not satisfiable: {int1_start} >= {content_length}", content_length)
-
-        if int1_end >= content_length:
-            # both ends of the range are 0-indexed, inclusive - so it starts at 0 and ends at content_length - 1
-            if refget_mode:  # sigh... GA4GH moment
-                raise StreamingBadRange(f"end is beyond content length: {int1_end} >= {content_length}")
-            raise StreamingRangeNotSatisfiable(f"not satisfiable: {int1_end} >= {content_length}", content_length)
-
-        if not refget_mode and int1_start > int1_end:
-            raise StreamingRangeNotSatisfiable(f"inverted interval: {int1}", content_length)
-
-        if i < n_intervals - 1:
-            int2 = intervals[i + 1]
-            int2_start, int2_end = int2
-
-            if int1_end >= int2_start:
-                raise StreamingRangeNotSatisfiable(f"intervals overlap: {int1}, {int2}", content_length)
-
-    return tuple(intervals)
 
 
 async def stream_file(
@@ -192,18 +87,18 @@ async def stream_http(
                 n_bytes = None
                 if (crh := res.headers.get("Content-Range")) is not None and crh.startswith("bytes */"):
                     n_bytes = int(crh.split("/")[-1])
-                raise StreamingRangeNotSatisfiable(f"Range not satisfiable while streaming {url}", n_bytes)
+                raise se.StreamingRangeNotSatisfiable(f"Range not satisfiable while streaming {url}", n_bytes)
 
             elif res.status > 299:
                 err_content = (await res.content.read()).decode("utf-8")
-                raise StreamingProxyingError(f"Error while streaming {url}: {res.status} {err_content}")
+                raise se.StreamingProxyingError(f"Error while streaming {url}: {res.status} {err_content}")
 
             if yield_status_as_first_2:
                 yield res.status.to_bytes(2, "big")
 
             if yield_content_length_as_next_8:
                 if "Content-Length" not in res.headers:
-                    raise StreamingProxyingError(f"Error while streaming {url}: missing Content-Length header")
+                    raise se.StreamingProxyingError(f"Error while streaming {url}: missing Content-Length header")
                 yield int(res.headers["Content-Length"]).to_bytes(8, "big")
 
             async for chunk in res.content.iter_chunked(config.file_response_chunk_size):
@@ -243,7 +138,7 @@ async def stream_from_uri(
     try:
         parsed_uri = urlparse(original_uri)
     except ValueError:
-        raise StreamingBadURI(f"Bad URI: {original_uri}")
+        raise se.StreamingBadURI(f"Bad URI: {original_uri}")
 
     match parsed_uri.scheme:
         case "file":
@@ -274,13 +169,13 @@ async def stream_from_uri(
             status_code = int.from_bytes(await anext(stream), "big")  # 2 bytes specifying status code
 
         case _:
-            raise StreamingUnsupportedURIScheme(parsed_uri.scheme)
+            raise se.StreamingUnsupportedURIScheme(parsed_uri.scheme)
 
     # Content length should be the next 8 bytes of the stream
     content_length = int.from_bytes(await anext(stream), "big")
 
     if impose_response_limit and content_length > config.response_substring_limit:
-        raise StreamingResponseExceededLimit()
+        raise se.StreamingResponseExceededLimit()
 
     async def _agen():
         async for chunk in stream:
@@ -313,23 +208,23 @@ async def generate_uri_streaming_response(
             media_type=media_type,
             status_code=status_code,
         )
-    except StreamingRangeNotSatisfiable as e:
+    except se.StreamingRangeNotSatisfiable as e:
         raise HTTPException(
             status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
             headers={"Content-Range": f"bytes */{e.n_bytes}"},
         )
-    except StreamingBadRange:
+    except se.StreamingBadRange:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid range header value: {range_header}"
         )
-    except StreamingProxyingError as e:  #
+    except se.StreamingProxyingError as e:  #
         logger.error(f"Encountered streaming error for {uri}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-    except StreamingUnsupportedURIScheme as e:  # Unsupported URI scheme
+    except se.StreamingUnsupportedURIScheme as e:  # Unsupported URI scheme
         err = f"Unsupported URI scheme in genome record: {e}"
         logger.error(err)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=err)
-    except StreamingBadURI as e:  # URI parsing error
+    except se.StreamingBadURI as e:  # URI parsing error
         err = f"Bad URI in genome record: {e}"
         logger.error(err)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=err)

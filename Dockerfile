@@ -6,6 +6,10 @@ RUN pip install --no-cache-dir "uvicorn[standard]==0.30.1"
 
 WORKDIR /reference
 
+# Make sure we have a temporary directory in the container, although ideally one should
+# be mounted in so it's not stored on the overlay FS.
+RUN mkdir -p tmp
+
 COPY pyproject.toml .
 COPY poetry.lock .
 
@@ -18,6 +22,7 @@ RUN poetry config virtualenvs.create false && \
 # Manually copy only what's relevant
 # (Don't use .dockerignore, which allows us to have development containers too)
 COPY bento_reference_service bento_reference_service
+COPY entrypoint.bash .
 COPY run.bash .
 COPY LICENSE .
 COPY README.md .
@@ -25,4 +30,5 @@ COPY README.md .
 # Install the module itself, locally (similar to `pip install -e .`)
 RUN poetry install --without dev
 
+ENTRYPOINT [ "bash", "./entrypoint.bash" ]
 CMD [ "bash", "./run.bash" ]

@@ -81,16 +81,6 @@ def test_client(db: Database):
         yield client
 
 
-# noinspection PyUnusedLocal
-@pytest.fixture(scope="session")
-def event_loop(request):
-    # Create an instance of the default event loop for each test case.
-    # See https://github.com/pytest-dev/pytest-asyncio/issues/38#issuecomment-264418154
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
-
-
 @pytest.fixture
 def aioresponse():
     with aioresponses() as m:

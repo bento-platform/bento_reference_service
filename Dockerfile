@@ -6,6 +6,10 @@ RUN pip install --no-cache-dir "uvicorn[standard]==0.30.1"
 
 WORKDIR /reference
 
+# Make sure we have a temporary directory in the container, although ideally one should
+# be mounted in so it's not stored on the overlay FS.
+RUN mkdir -p tmp
+
 COPY pyproject.toml .
 COPY poetry.lock .
 

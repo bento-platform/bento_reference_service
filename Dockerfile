@@ -22,6 +22,7 @@ RUN poetry config virtualenvs.create false && \
 # Manually copy only what's relevant
 # (Don't use .dockerignore, which allows us to have development containers too)
 COPY bento_reference_service bento_reference_service
+COPY entrypoint.bash .
 COPY run.bash .
 COPY LICENSE .
 COPY README.md .

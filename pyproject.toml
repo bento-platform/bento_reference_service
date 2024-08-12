@@ -25,9 +25,9 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.10.0"
-fastapi = {extras = ["all"], version = "^0.111.1"}
+fastapi = {extras = ["all"], version = "^0.112.0"}
 pydantic = "^2.6.1"
-bento-lib = {extras = ["fastapi"], version = "^11.11.2"}
+bento-lib = {extras = ["fastapi"], version = "^11.12.0"}
 aiofiles = "^24.1.0"
 pysam = "~0.22.0"
 jsonschema = "^4.21.1"
@@ -36,8 +36,8 @@ asyncpg = "^0.29.0"
 
 [tool.poetry.group.dev.dependencies]
 aioresponses = "^0.7.6"
-black = "^24.2.0"
-coverage = "^7.4.0"
+black = "^24.8.0"
+coverage = "^7.6.1"
 debugpy = "^1.8.1"
 httpx = "^0.27.0"
 pytest = "^8.2.1"

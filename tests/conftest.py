@@ -1,9 +1,9 @@
-import asyncio
 import asyncpg
 import pytest
 import pytest_asyncio
 
 from aioresponses import aioresponses
+from bento_lib.drs.resolver import DrsResolver
 from fastapi.testclient import TestClient
 from typing import AsyncGenerator
 
@@ -14,10 +14,24 @@ os.environ["BENTO_VALIDATE_SSL"] = "false"
 os.environ["CORS_ORIGINS"] = "*"
 os.environ["BENTO_AUTHZ_SERVICE_URL"] = "https://authz.local"
 
-from bento_reference_service.config import get_config
+from bento_reference_service.config import Config, get_config
 from bento_reference_service.db import Database, get_db
+from bento_reference_service.drs import get_drs_resolver
 from bento_reference_service.logger import get_logger
 from bento_reference_service.main import app
+
+
+@pytest.fixture()
+def config() -> Config:
+    return get_config()
+
+
+@pytest.fixture()
+def drs_resolver(config: Config) -> DrsResolver:
+    drs = get_drs_resolver(config)
+    drs._cache_ttl = 0
+    drs._drs_record_cache = {}
+    return drs
 
 
 async def get_test_db() -> AsyncGenerator[Database, None]:

@@ -13,6 +13,20 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio()
+async def test_uri_streaming_bad_uri():
+    config = c.get_config()
+    with pytest.raises(se.StreamingBadURI):
+        await s.stream_from_uri(config, d.get_drs_resolver(config), logger, "http://[.com", None, False)
+
+
+@pytest.mark.asyncio()
+async def test_uri_streaming_bad_scheme():
+    config = c.get_config()
+    with pytest.raises(se.StreamingUnsupportedURIScheme):
+        await s.stream_from_uri(config, d.get_drs_resolver(config), logger, "asdf://example.org", None, False)
+
+
+@pytest.mark.asyncio()
 async def test_http_streaming(aioresponse: aioresponses):
     aioresponse.get(HTTP_TEST_URI, body=b"test page")
 

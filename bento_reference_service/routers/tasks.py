@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from ..config import ConfigDependency
 from ..db import DatabaseDependency
+from ..drs import DrsResolverDependency
 from ..features import ingest_features_task
 from ..logger import LoggerDependency
 from ..models import TaskParams, Task
@@ -24,6 +25,7 @@ async def tasks_create(
     background_tasks: BackgroundTasks,
     config: ConfigDependency,
     db: DatabaseDependency,
+    drs_resolver: DrsResolverDependency,
     logger: LoggerDependency,
 ) -> Task:
     genome_id = task.genome_id
@@ -41,7 +43,7 @@ async def tasks_create(
 
     # currently, ingest_features is the only task type, so we don't need an if-statement to decide which task to
     # dispatch.
-    background_tasks.add_task(ingest_features_task, genome_id, task_id, config, db, logger)
+    background_tasks.add_task(ingest_features_task, genome_id, task_id, config, db, drs_resolver, logger)
 
     return task
 

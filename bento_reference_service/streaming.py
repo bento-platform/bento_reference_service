@@ -5,8 +5,10 @@ import json
 import logging
 import pathlib
 
-from bento_lib.drs.utils import decode_drs_uri
+from bento_lib.drs.exceptions import DrsRecordNotFound, DrsRequestError
+from bento_lib.drs.resolver import DrsResolver
 from bento_lib.streaming import exceptions as se
+from bento_lib.streaming.file import stream_file
 from bento_lib.streaming.range import parse_range_header
 from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -28,52 +30,6 @@ def tcp_connector(config: Config) -> aiohttp.TCPConnector:
     return aiohttp.TCPConnector(ssl=config.bento_validate_ssl)
 
 
-async def stream_file(
-    config: Config,
-    path: pathlib.Path,
-    range_header: str | None,
-    yield_content_length_as_first_8: bool = False,
-):
-    """
-    Stream the contents of a file, optionally yielding the content length as the first 8 bytes of the stream.
-    Coordinate parameters are 0-based and inclusive, e.g., 0-10 yields the first 11 bytes. This matches the format of
-    HTTP range headers.
-    """
-
-    file_size = (await aiofiles.os.stat(path)).st_size
-    intervals = parse_range_header(range_header, file_size)
-
-    # for now, only support returning a single range of bytes; take the start and end from the first interval given:
-    start, end = intervals[0]
-    response_size: int = end - start + 1
-
-    # TODO: support multipart/byterange responses
-
-    if yield_content_length_as_first_8:
-        yield response_size.to_bytes(8, "big")
-
-    chunk_size = config.file_response_chunk_size
-
-    async with aiofiles.open(path, "rb") as ff:
-        # Logic mostly ported from bento_drs
-
-        # First, skip over <start> bytes to get to the beginning of the range
-        await ff.seek(start)
-
-        byte_offset: int = start
-        while True:
-            # Add a 1 to the amount to read if it's below chunk size, because the last coordinate is inclusive.
-            data = await ff.read(min(chunk_size, end + 1 - byte_offset))
-            byte_offset += len(data)
-            yield data
-
-            # If we've hit the end of the file and are reading empty byte strings, or we've reached the
-            # end of our range (inclusive), then escape the loop.
-            # This is guaranteed to terminate with a finite-sized file.
-            if not data or byte_offset > end:
-                break
-
-
 async def stream_http(
     config: Config,
     url: str,
@@ -87,7 +43,9 @@ async def stream_http(
                 n_bytes = None
                 if (crh := res.headers.get("Content-Range")) is not None and crh.startswith("bytes */"):
                     n_bytes = int(crh.split("/")[-1])
-                raise se.StreamingRangeNotSatisfiable(f"Range not satisfiable while streaming {url}", n_bytes)
+                raise se.StreamingRangeNotSatisfiable(
+                    f"Range not satisfiable while streaming {url}", "proxied", n_bytes
+                )
 
             elif res.status > 299:
                 err_content = (await res.content.read()).decode("utf-8")
@@ -105,33 +63,44 @@ async def stream_http(
                 yield chunk
 
 
-async def drs_bytes_url_from_uri(config: Config, logger: logging.Logger, drs_uri: str) -> str:
-    async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
-        async with session.get(decoded_uri := decode_drs_uri(drs_uri)) as res:
-            if res.status != status.HTTP_200_OK:
-                logger.error(
-                    f"Error encountered while accessing DRS record: {drs_uri} (decoded to {decoded_uri}); got "
-                    f"{res.status} {(await res.content.read()).decode('utf-8')}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"A {res.status} error was encountered while accessing DRS record for genome",
-                )
+async def drs_bytes_url_from_uri(
+    config: Config, drs_resolver: DrsResolver, logger: logging.Logger, drs_uri: str
+) -> str:
+    session_kwargs = {"connector": tcp_connector(config)}
 
-            drs_obj = await res.json()
-            # TODO: this doesn't support access IDs / the full DRS spec
-            logger.debug(f"{drs_uri} (decoded to {decoded_uri}): got DRS response {json.dumps(drs_obj)}")
-            https_access = next(filter(lambda am: am["type"] == "https", drs_obj.get("access_methods", [])), None)
-            if https_access is None:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="DRS record for genome does not have an HTTPS access method",
-                )
-            return https_access["access_url"]["url"]
+    try:
+        drs_obj = await drs_resolver.fetch_drs_record_by_uri_async(drs_uri, session_kwargs)
+    except DrsRecordNotFound as e:
+        logger.error(str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"A Not Found error was encountered while accessing DRS record for genome",
+        )
+    except DrsRequestError as e:
+        logger.error(str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error was encountered while accessing DRS record for genome",
+        )
+
+    # TODO: this doesn't support access IDs / the full DRS spec
+    logger.debug(f"{drs_uri}: got DRS response {json.dumps(drs_obj)}")
+    https_access = next(filter(lambda am: am["type"] == "https", drs_obj.get("access_methods", [])), None)
+    if https_access is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="DRS record for genome does not have an HTTPS access method",
+        )
+    return https_access["access_url"]["url"]
 
 
 async def stream_from_uri(
-    config: Config, logger: logging.Logger, original_uri: str, range_header: str | None, impose_response_limit: bool
+    config: Config,
+    drs_resolver: DrsResolver,
+    logger: logging.Logger,
+    original_uri: str,
+    range_header: str | None,
+    impose_response_limit: bool,
 ) -> tuple[int, int, AsyncIterator[bytes]]:
     stream: AsyncIterator[bytes]
 
@@ -142,8 +111,19 @@ async def stream_from_uri(
 
     match parsed_uri.scheme:
         case "file":
+            file_path = pathlib.Path(parsed_uri.path)
+            file_size = (await aiofiles.os.stat(file_path)).st_size
+            intervals = parse_range_header(range_header, file_size)
+
+            # TODO: for now, only support returning a single range of bytes; take the start and end from the first
+            #  interval given:
+            # TODO: support multipart/byterange responses
             stream = stream_file(
-                config, pathlib.Path(parsed_uri.path), range_header, yield_content_length_as_first_8=True
+                pathlib.Path(parsed_uri.path),
+                intervals[0],
+                config.file_response_chunk_size,
+                yield_content_length_as_first_8=True,
+                file_size=file_size,
             )
             status_code = status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK
 
@@ -152,7 +132,7 @@ async def stream_from_uri(
 
             # If this is a DRS URI, we need to first fetch the DRS object record + parse out the access method
             url = (
-                await drs_bytes_url_from_uri(config, logger, original_uri)
+                await drs_bytes_url_from_uri(config, drs_resolver, logger, original_uri)
                 if parsed_uri.scheme == "drs"
                 else original_uri
             )
@@ -186,6 +166,7 @@ async def stream_from_uri(
 
 async def generate_uri_streaming_response(
     config: Config,
+    drs_resolver: DrsResolver,
     logger: logging.Logger,
     uri: str,
     range_header: str | None,
@@ -196,7 +177,7 @@ async def generate_uri_streaming_response(
 ):
     try:
         content_length, status_code, stream = await stream_from_uri(
-            config, logger, uri, range_header, impose_response_limit
+            config, drs_resolver, logger, uri, range_header, impose_response_limit
         )
         return StreamingResponse(
             stream,

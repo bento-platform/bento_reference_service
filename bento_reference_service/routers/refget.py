@@ -12,6 +12,7 @@ from .. import models, streaming as s, __version__
 from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..db import DatabaseDependency
+from ..drs import DrsResolverDependency
 from ..fai import parse_fai
 from ..logger import LoggerDependency
 from ..models import Alias
@@ -76,6 +77,7 @@ REFGET_RANGE_NOT_SATISFIABLE = Response(
 @refget_router.get("/{sequence_checksum}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def refget_sequence(
     config: ConfigDependency,
+    drs_resolver: DrsResolverDependency,
     logger: LoggerDependency,
     db: DatabaseDependency,
     request: Request,
@@ -113,7 +115,9 @@ async def refget_sequence(
 
     # Fetch FAI so we can index into FASTA, properly translating the range header for the contig along the way.
     with io.BytesIO() as fb:
-        _, _, stream = await s.stream_from_uri(config, logger, genome.fai, None, impose_response_limit=False)
+        _, _, stream = await s.stream_from_uri(
+            config, drs_resolver, logger, genome.fai, None, impose_response_limit=False
+        )
         async for chunk in stream:
             fb.write(chunk)
         fb.seek(0)
@@ -189,7 +193,7 @@ async def refget_sequence(
     fasta_range_header = f"bytes={fasta_start_byte}-{fasta_end_byte}"
 
     _, _, fasta_stream = await s.stream_from_uri(
-        config, logger, genome.fasta, fasta_range_header, impose_response_limit=True
+        config, drs_resolver, logger, genome.fasta, fasta_range_header, impose_response_limit=True
     )
 
     async def _format_response():

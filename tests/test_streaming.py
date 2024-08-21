@@ -148,3 +148,11 @@ async def test_http_streaming_404_3(aioresponse: aioresponses, config: c.Config,
             False,
         )
         await anext(res.body_iterator)
+
+
+@pytest.mark.asyncio()
+async def test_http_streaming_response_limit(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
+    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_200_OK, body=b"x" * 105000, headers={"content-length": "105000"})
+    with pytest.raises(se.StreamingResponseExceededLimit):
+        _, _, stream = await s.stream_from_uri(config, drs_resolver, logger, HTTP_TEST_URI, None, True)
+        await anext(stream)

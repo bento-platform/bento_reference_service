@@ -2,12 +2,13 @@ import logging
 import pytest
 
 from aioresponses import aioresponses
+from bento_lib.drs.resolver import DrsResolver
 from bento_lib.streaming import exceptions as se
 from fastapi import HTTPException, status
 
 from bento_reference_service import config as c, streaming as s
 
-from .shared_data import SARS_COV_2_FASTA_PATH
+from .shared_data import TEST_DRS_REPLY_NO_ACCESS, TEST_DRS_REPLY
 
 HTTP_TEST_URI = "https://test.local/file.txt"
 
@@ -15,74 +16,65 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio()
-async def test_file_streaming():
-    stream = s.stream_file(c.get_config(), SARS_COV_2_FASTA_PATH, "bytes=0-")
-
-    stream_contents = b""
-    async for chunk in stream:
-        stream_contents += chunk
-
-    with open(SARS_COV_2_FASTA_PATH, "rb") as fh:
-        fc = fh.read()
-
-    assert fc == stream_contents
-    file_length = len(fc)
-
-    # ---
-
-    stream = s.stream_file(c.get_config(), SARS_COV_2_FASTA_PATH, "bytes=0-", yield_content_length_as_first_8=True)
-    content_length = int.from_bytes(await anext(stream), byteorder="big")
-    assert content_length == file_length
-    async for chunk in stream:
-        assert isinstance(chunk, bytes)
-
-
-with open(SARS_COV_2_FASTA_PATH, "rb") as cfh:
-    COVID_FASTA_BYTES = cfh.read()
-
-
-@pytest.mark.parametrize(
-    "range_header,expected,size",
-    [
-        ("bytes=0-10", b">MN908947.3", 11),
-        ("bytes=5-10", b"8947.3", None),
-        ("bytes=10-", COVID_FASTA_BYTES[10:], None),
-        ("bytes=0-2, 5-5", b">MN", 3),  # TODO: ignores everything except first range
-        ("bytes=0-2, 5-5, -5", b">MN", 3),  # TODO: ignores everything except first range
-        ("bytes=-5", b"AAAA\n", 5),
-        ("bytes=-1000000", COVID_FASTA_BYTES, None),
-    ],
-)
-@pytest.mark.asyncio()
-async def test_file_streaming_ranges(range_header: str, expected: bytes, size: int | None):
-    stream = s.stream_file(
-        c.get_config(), SARS_COV_2_FASTA_PATH, range_header, yield_content_length_as_first_8=size is not None
+async def test_drs_bytes_url_from_uri(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
+    aioresponse.get("https://example.org/ga4gh/drs/v1/objects/abc", payload=TEST_DRS_REPLY)
+    assert (
+        await s.drs_bytes_url_from_uri(config, drs_resolver, logger, "drs://example.org/abc")
+        == TEST_DRS_REPLY["access_methods"][1]["access_url"]["url"]
     )
 
-    if size is not None:
-        cl = int.from_bytes(await anext(stream), byteorder="big")
-        assert cl == size
 
-    stream_contents = b""
-    async for chunk in stream:
-        stream_contents += chunk
+@pytest.mark.asyncio()
+async def test_drs_bytes_url_from_uri_not_found(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
+    aioresponse.get(
+        "https://example.org/ga4gh/drs/v1/objects/abc",
+        status=status.HTTP_404_NOT_FOUND,
+        payload={"message": "Not Found"},
+    )
 
-    assert stream_contents == expected
+    with pytest.raises(HTTPException) as e:
+        await s.drs_bytes_url_from_uri(config, drs_resolver, logger, "drs://example.org/abc")
+
+    assert e.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert "Not Found error" in e.value.detail
 
 
 @pytest.mark.asyncio()
-async def test_file_streaming_range_errors():
-    with pytest.raises(se.StreamingRangeNotSatisfiable):
-        stream = s.stream_file(c.get_config(), SARS_COV_2_FASTA_PATH, "bytes=1000000000-")  # past EOF
-        await anext(stream)
+async def test_drs_bytes_url_from_uri_500(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
+    aioresponse.get(
+        "https://example.org/ga4gh/drs/v1/objects/abc",
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        payload={"message": "Internal Server Error"},
+    )
 
-    with pytest.raises(se.StreamingRangeNotSatisfiable):
-        stream = s.stream_file(c.get_config(), SARS_COV_2_FASTA_PATH, "bytes=0-10000000000")  # past EOF
-        await anext(stream)
+    with pytest.raises(HTTPException) as e:
+        await s.drs_bytes_url_from_uri(config, drs_resolver, logger, "drs://example.org/abc")
 
-    with pytest.raises(se.StreamingRangeNotSatisfiable):
-        stream = s.stream_file(c.get_config(), SARS_COV_2_FASTA_PATH, "bytes=10000-5000")  # start > end
-        await anext(stream)
+    assert e.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert "while accessing DRS record" in e.value.detail
+
+
+@pytest.mark.asyncio()
+async def test_drs_bytes_url_from_uri_no_access(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
+    aioresponse.get("https://example.org/ga4gh/drs/v1/objects/abc", payload=TEST_DRS_REPLY_NO_ACCESS)
+
+    with pytest.raises(HTTPException) as e:
+        await s.drs_bytes_url_from_uri(config, drs_resolver, logger, "drs://example.org/abc")
+
+    assert e.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert "HTTPS access method" in e.value.detail
+
+
+@pytest.mark.asyncio()
+async def test_uri_streaming_bad_uri(config: c.Config, drs_resolver: DrsResolver):
+    with pytest.raises(se.StreamingBadURI):
+        await s.stream_from_uri(config, drs_resolver, logger, "http://[.com", None, False)
+
+
+@pytest.mark.asyncio()
+async def test_uri_streaming_bad_scheme(config: c.Config, drs_resolver: DrsResolver):
+    with pytest.raises(se.StreamingUnsupportedURIScheme):
+        await s.stream_from_uri(config, drs_resolver, logger, "asdf://example.org", None, False)
 
 
 @pytest.mark.asyncio()
@@ -134,19 +126,21 @@ async def test_http_streaming_404_1(aioresponse: aioresponses):
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming_404_2(aioresponse: aioresponses):
+async def test_http_streaming_404_2(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
     aioresponse.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
     with pytest.raises(se.StreamingProxyingError):
-        _, _, stream = await s.stream_from_uri(c.get_config(), logger, HTTP_TEST_URI, None, False)
+        _, _, stream = await s.stream_from_uri(config, drs_resolver, logger, HTTP_TEST_URI, None, False)
         await anext(stream)
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming_404_3(aioresponse: aioresponses):
+async def test_http_streaming_404_3(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
     aioresponse.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
     with pytest.raises(HTTPException):
+        config = c.get_config()
         res = await s.generate_uri_streaming_response(
-            c.get_config(),
+            config,
+            drs_resolver,
             logger,
             HTTP_TEST_URI,
             None,
@@ -154,3 +148,11 @@ async def test_http_streaming_404_3(aioresponse: aioresponses):
             False,
         )
         await anext(res.body_iterator)
+
+
+@pytest.mark.asyncio()
+async def test_http_streaming_response_limit(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
+    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_200_OK, body=b"x" * 105000, headers={"content-length": "105000"})
+    with pytest.raises(se.StreamingResponseExceededLimit):
+        _, _, stream = await s.stream_from_uri(config, drs_resolver, logger, HTTP_TEST_URI, None, True)
+        await anext(stream)

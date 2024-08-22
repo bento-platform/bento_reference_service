@@ -27,6 +27,8 @@ class Config(BentoFastAPIBaseConfig):
 
     feature_response_record_limit: int = 1000
 
+    drs_cache_ttl: float = 900.0
+
 
 @lru_cache()
 def get_config():

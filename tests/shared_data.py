@@ -15,6 +15,9 @@ __all__ = [
     "TEST_GENOME_HG38_CHR1_F100K",
     "TEST_GENOME_HG38_CHR1_F100K_OBJ",
     "AUTHORIZATION_HEADER",
+    "TEST_DRS_ID",
+    "TEST_DRS_REPLY_NO_ACCESS",
+    "TEST_DRS_REPLY",
 ]
 
 DATA_DIR = (pathlib.Path(__file__).parent / "data").absolute()
@@ -75,3 +78,37 @@ TEST_GENOME_HG38_CHR1_F100K = {
 TEST_GENOME_HG38_CHR1_F100K_OBJ = Genome(**TEST_GENOME_HG38_CHR1_F100K)
 
 AUTHORIZATION_HEADER = {"Authorization": "Token bearer"}
+
+
+# Test DRS responses
+
+TEST_DRS_ID = "dd11912c-3433-4a0a-8a01-3c0699288bef"
+
+TEST_DRS_REPLY_NO_ACCESS = {
+    "checksums": [
+        {
+            "checksum": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+            "type": "sha-256",
+        }
+    ],
+    "created_time": "2021-03-17T21:29:15+00:00",
+    "updated_time": "2021-03-17T21:29:15+00:00",
+    "id": TEST_DRS_ID,
+    "mime_type": "text/plain",
+    "self_uri": f"drs://localhost/{TEST_DRS_ID}",
+    "size": 4,
+}
+
+TEST_DRS_REPLY = {
+    **TEST_DRS_REPLY_NO_ACCESS,
+    "access_methods": [
+        {
+            "type": "file",
+            "access_url": {"url": "file:///test.txt"},
+        },
+        {
+            "type": "https",
+            "access_url": {"url": "https://example.org/test.txt"},
+        },
+    ],
+}

@@ -10,6 +10,7 @@ from .. import models as m
 from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..db import Database, DatabaseDependency
+from ..drs import DrsResolverDependency
 from ..logger import LoggerDependency
 from ..streaming import generate_uri_streaming_response
 from .constants import DEPENDENCY_DELETE_REFERENCE_MATERIAL, DEPENDENCY_INGEST_REFERENCE_MATERIAL
@@ -72,7 +73,12 @@ async def genomes_create(
 
 @genome_router.get("/{genome_id}.fa", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_fasta(
-    genome_id: str, config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request
+    genome_id: str,
+    config: ConfigDependency,
+    db: DatabaseDependency,
+    drs_resolver: DrsResolverDependency,
+    logger: LoggerDependency,
+    request: Request,
 ) -> StreamingResponse:
     # need internal FASTA URI:
     genome: m.Genome = await get_genome_or_raise_404(db, genome_id, external_resource_uris=False)
@@ -82,6 +88,7 @@ async def genomes_detail_fasta(
     range_header: str | None = request.headers.get("Range", None)
     return await generate_uri_streaming_response(
         config,
+        drs_resolver,
         logger,
         genome.fasta,
         range_header,
@@ -93,7 +100,12 @@ async def genomes_detail_fasta(
 
 @genome_router.get("/{genome_id}.fa.fai", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_fasta_index(
-    genome_id: str, config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request
+    genome_id: str,
+    config: ConfigDependency,
+    db: DatabaseDependency,
+    drs_resolver: DrsResolverDependency,
+    logger: LoggerDependency,
+    request: Request,
 ) -> StreamingResponse:
     # need internal FAI URI:
     genome: m.Genome = await get_genome_or_raise_404(db, genome_id, external_resource_uris=False)
@@ -102,6 +114,7 @@ async def genomes_detail_fasta_index(
     range_header: str | None = request.headers.get("Range", None)
     return await generate_uri_streaming_response(
         config,
+        drs_resolver,
         logger,
         genome.fai,
         range_header,
@@ -233,7 +246,12 @@ async def genomes_detail_igv_js_features(
 
 @genome_router.get("/{genome_id}/features.gff3.gz", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_features_gff3(
-    config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request, genome_id: str
+    config: ConfigDependency,
+    db: DatabaseDependency,
+    drs_resolver: DrsResolverDependency,
+    logger: LoggerDependency,
+    request: Request,
+    genome_id: str,
 ):
     # need internal GFF3.gz URI:
     genome: m.Genome = await get_genome_or_raise_404(db, genome_id=genome_id, external_resource_uris=False)
@@ -248,6 +266,7 @@ async def genomes_detail_features_gff3(
     range_header: str | None = request.headers.get("Range", None)
     return await generate_uri_streaming_response(
         config,
+        drs_resolver,
         logger,
         genome.gff3_gz,
         range_header,
@@ -259,7 +278,12 @@ async def genomes_detail_features_gff3(
 
 @genome_router.get("/{genome_id}/features.gff3.gz.tbi", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_gene_features_gff3_index(
-    config: ConfigDependency, db: DatabaseDependency, logger: LoggerDependency, request: Request, genome_id: str
+    config: ConfigDependency,
+    db: DatabaseDependency,
+    drs_resolver: DrsResolverDependency,
+    logger: LoggerDependency,
+    request: Request,
+    genome_id: str,
 ):
     # need internal GFF3.gz URI:
     genome: m.Genome = await get_genome_or_raise_404(db, genome_id=genome_id, external_resource_uris=False)
@@ -275,6 +299,7 @@ async def genomes_detail_gene_features_gff3_index(
     range_header: str | None = request.headers.get("Range", None)
     return await generate_uri_streaming_response(
         config,
+        drs_resolver,
         logger,
         genome.gff3_gz_tbi,
         range_header,

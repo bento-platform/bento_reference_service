@@ -20,6 +20,9 @@ from bento_reference_service.drs import get_drs_resolver
 from bento_reference_service.logger import get_logger
 from bento_reference_service.main import app
 
+from .shared_data import TEST_GENOME_SARS_COV_2
+from .shared_functions import create_genome_with_permissions
+
 
 @pytest.fixture()
 def config() -> Config:
@@ -99,3 +102,9 @@ def test_client(db: Database):
 def aioresponse():
     with aioresponses() as m:
         yield m
+
+
+@pytest.fixture
+def sars_cov_2_genome(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+    create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
+    return TEST_GENOME_SARS_COV_2

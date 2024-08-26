@@ -98,10 +98,7 @@ async def test_genome_create(test_client: TestClient, aioresponse: aioresponses,
     assert len(res.json()) == 2
 
 
-async def test_genome_detail_endpoints(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    # setup: create genome  TODO: fixture
-    create_covid_genome_with_permissions(test_client, aioresponse)
-
+async def test_genome_detail_endpoints(test_client: TestClient, sars_cov_2_genome):
     # tests
 
     res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}")
@@ -194,10 +191,7 @@ async def test_genome_without_gff3_and_then_patch(test_client: TestClient, aiore
     assert res.status_code == status.HTTP_200_OK
 
 
-async def test_genome_delete(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    # setup: create genome  TODO: fixture
-    create_covid_genome_with_permissions(test_client, aioresponse)
-
+async def test_genome_delete(test_client: TestClient, sars_cov_2_genome, aioresponse: aioresponses):
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT

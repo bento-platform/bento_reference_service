@@ -1,11 +1,9 @@
 import pysam
 
-from aioresponses import aioresponses
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from .shared_data import SARS_COV_2_FASTA_PATH, TEST_GENOME_SARS_COV_2
-from .shared_functions import create_genome_with_permissions
+from .shared_data import SARS_COV_2_FASTA_PATH
 
 
 REFGET_2_0_0_TYPE = {"group": "org.ga4gh", "artifact": "refget", "version": "2.0.0"}
@@ -38,10 +36,8 @@ def test_refget_sequence_not_found(test_client: TestClient, db_cleanup):
     assert res.status_code == status.HTTP_404_NOT_FOUND
 
 
-def test_refget_sequence_invalid_requests(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    # TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
-    test_contig = TEST_GENOME_SARS_COV_2["contigs"][0]
+def test_refget_sequence_invalid_requests(test_client: TestClient, sars_cov_2_genome):
+    test_contig = sars_cov_2_genome["contigs"][0]
     seq_url = f"/sequence/{test_contig['md5']}"
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -86,11 +82,8 @@ def test_refget_sequence_invalid_requests(test_client: TestClient, aioresponse: 
     assert res.content == b"Range Not Satisfiable"
 
 
-def test_refget_sequence_full(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    # TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
-
-    test_contig = TEST_GENOME_SARS_COV_2["contigs"][0]
+def test_refget_sequence_full(test_client: TestClient, sars_cov_2_genome):
+    test_contig = sars_cov_2_genome["contigs"][0]
 
     # Load COVID contig bytes
     rf = pysam.FastaFile(str(SARS_COV_2_FASTA_PATH))
@@ -115,11 +108,8 @@ def test_refget_sequence_full(test_client: TestClient, aioresponse: aioresponses
     assert res.content == seq
 
 
-def test_refget_sequence_partial(test_client, aioresponse: aioresponses, db_cleanup):
-    # TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
-
-    test_contig = TEST_GENOME_SARS_COV_2["contigs"][0]
+def test_refget_sequence_partial(test_client, sars_cov_2_genome):
+    test_contig = sars_cov_2_genome["contigs"][0]
     seq_url = f"/sequence/{test_contig['md5']}"
 
     # Load COVID contig bytes
@@ -164,10 +154,8 @@ def test_refget_sequence_partial(test_client, aioresponse: aioresponses, db_clea
     assert res.content == seq[-10:]
 
 
-def test_refget_metadata(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    # TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
-    test_contig = TEST_GENOME_SARS_COV_2["contigs"][0]
+def test_refget_metadata(test_client: TestClient, sars_cov_2_genome):
+    test_contig = sars_cov_2_genome["contigs"][0]
     seq_m_url = f"/sequence/{test_contig['md5']}/metadata"
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -185,17 +173,12 @@ def test_refget_metadata(test_client: TestClient, aioresponse: aioresponses, db_
     }
 
 
-def test_refget_metadata_errors(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    # TODO: fixture
-    create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
-    test_contig = TEST_GENOME_SARS_COV_2["contigs"][0]
-    seq_m_url = f"/sequence/{test_contig['md5']}/metadata"
-
-    # ------------------------------------------------------------------------------------------------------------------
-
-    res = test_client.get(seq_m_url, headers=HEADERS_ACCEPT_PLAIN)
+def test_refget_metadata_406(test_client: TestClient, sars_cov_2_genome):
+    res = test_client.get(f"/sequence/{sars_cov_2_genome['contigs'][0]['md5']}/metadata", headers=HEADERS_ACCEPT_PLAIN)
     assert res.status_code == status.HTTP_406_NOT_ACCEPTABLE
 
+
+def test_refget_metadata_404(test_client: TestClient):
     res = test_client.get("/sequence/does-not-exist/metadata")
     # TODO: proper content type for exception - RefGet error class?
     assert res.status_code == status.HTTP_404_NOT_FOUND

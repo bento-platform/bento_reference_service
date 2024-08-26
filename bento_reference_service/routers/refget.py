@@ -1,5 +1,7 @@
 import io
 import math
+import orjson
+import typing
 
 from bento_lib.service_info.helpers import build_service_type, build_service_info_from_pydantic_config
 from bento_lib.service_info.types import GA4GHServiceInfo
@@ -7,6 +9,7 @@ from bento_lib.streaming import exceptions as se, range as sr
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import Literal
 
 from .. import models, streaming as s, __version__
 from ..authz import authz_middleware
@@ -25,29 +28,53 @@ __all__ = [
 REFGET_VERSION = "2.0.0"
 REFGET_SERVICE_TYPE = build_service_type("org.ga4gh", "refget", REFGET_VERSION)
 
+REFGET_CHARSET = "us-ascii"
+
 REFGET_HEADER_TEXT = f"text/vnd.ga4gh.refget.v{REFGET_VERSION}+plain"
-REFGET_HEADER_TEXT_WITH_CHARSET = f"{REFGET_HEADER_TEXT}; charset=us-ascii"
+REFGET_HEADER_TEXT_WITH_CHARSET = f"{REFGET_HEADER_TEXT}; charset={REFGET_CHARSET}"
 REFGET_HEADER_JSON = f"application/vnd.ga4gh.refget.v{REFGET_VERSION}+json"
-REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset=us-ascii"
+REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset={REFGET_CHARSET}"
+
+
+class RefGetJSONResponse(Response):
+    media_type = REFGET_HEADER_JSON
+    charset = REFGET_CHARSET
+
+    def render(self, content: typing.Any) -> bytes:
+        return orjson.dumps(content, option=orjson.OPT_NON_STR_KEYS)
+
 
 refget_router = APIRouter(prefix="/sequence")
 
 
-@refget_router.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
-async def refget_service_info(
-    config: ConfigDependency, logger: LoggerDependency, request: Request, response: Response
-) -> dict:
-    accept_header: str | None = request.headers.get("Accept", None)
-    if accept_header and accept_header not in (
-        REFGET_HEADER_JSON_WITH_CHARSET,
-        REFGET_HEADER_JSON,
-        "application/json",
-        "application/*",
-        "*/*",
-    ):
+def check_accept_header(accept_header: str | None, mode: Literal["text", "json"]) -> None:
+    valid_header_values = (
+        (
+            REFGET_HEADER_TEXT_WITH_CHARSET,
+            REFGET_HEADER_TEXT,
+            "text/plain",
+            "text/*",
+            "*/*",
+        )
+        if mode == "text"
+        else (
+            REFGET_HEADER_JSON_WITH_CHARSET,
+            REFGET_HEADER_JSON,
+            "application/json",
+            "application/*",
+            "*/*",
+        )
+    )
+
+    if accept_header and accept_header not in valid_header_values:
         raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Not Acceptable")
 
-    response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
+
+@refget_router.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])
+async def refget_service_info(
+    config: ConfigDependency, logger: LoggerDependency, request: Request
+) -> RefGetJSONResponse:
+    check_accept_header(request.headers.get("Accept"), mode="json")
 
     genome_service_info: GA4GHServiceInfo = await build_service_info_from_pydantic_config(
         config, logger, {}, REFGET_SERVICE_TYPE, __version__
@@ -55,17 +82,19 @@ async def refget_service_info(
 
     del genome_service_info["bento"]
 
-    return {
-        **genome_service_info,
-        "refget": {
-            "circular_supported": False,
-            # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
-            # It's a substring!
-            "subsequence_limit": config.response_substring_limit,
-            "algorithms": ["md5", "ga4gh"],
-            "identifier_types": [],
-        },
-    }
+    return RefGetJSONResponse(
+        {
+            **genome_service_info,
+            "refget": {
+                "circular_supported": False,
+                # I don't like that they used the word 'subsequence' here... that's not what that means exactly.
+                # It's a substring!
+                "subsequence_limit": config.response_substring_limit,
+                "algorithms": ["md5", "ga4gh"],
+                "identifier_types": [],
+            },
+        }
+    )
 
 
 REFGET_BAD_REQUEST = Response(status_code=status.HTTP_400_BAD_REQUEST, content=b"Bad Request")
@@ -87,16 +116,11 @@ async def refget_sequence(
 ):
     headers = {"Content-Type": REFGET_HEADER_TEXT_WITH_CHARSET, "Accept-Ranges": "bytes"}
 
-    accept_header: str | None = request.headers.get("Accept", None)
-    if accept_header and accept_header not in (
-        REFGET_HEADER_TEXT_WITH_CHARSET,
-        REFGET_HEADER_TEXT,
-        "text/plain",
-        "text/*",
-        "*/*",
-    ):
-        logger.error(f"not acceptable: bad Accept header value")
-        return Response(status_code=status.HTTP_406_NOT_ACCEPTABLE, content=b"Not Acceptable")
+    try:
+        check_accept_header(request.headers.get("Accept"), mode="text")
+    except HTTPException as e:
+        logger.error(f"not acceptable: bad Accept header value")  # don't log actual value to prevent log injection
+        return Response(status_code=e.status_code, content=e.detail.encode("ascii"))
 
     # Don't use FastAPI's auto-Header tool for the Range header
     # 'cause I don't want to shadow Python's range() function
@@ -219,17 +243,21 @@ class RefGetSequenceMetadataResponse(BaseModel):
     metadata: RefGetSequenceMetadata
 
 
-@refget_router.get("/{sequence_checksum}/metadata", dependencies=[authz_middleware.dep_public_endpoint()])
+@refget_router.get(
+    "/{sequence_checksum}/metadata",
+    dependencies=[authz_middleware.dep_public_endpoint()],
+    responses={
+        status.HTTP_200_OK: {REFGET_HEADER_JSON: {"schema": RefGetSequenceMetadataResponse.model_json_schema()}}
+    },
+)
 async def refget_sequence_metadata(
-    db: DatabaseDependency,
-    response: Response,
-    sequence_checksum: str,
-) -> RefGetSequenceMetadataResponse:
+    db: DatabaseDependency, request: Request, sequence_checksum: str
+) -> RefGetJSONResponse:
+    check_accept_header(request.headers.get("Accept"), mode="json")
+
     res: tuple[str, models.ContigWithRefgetURI] | None = await db.get_genome_and_contig_by_checksum_str(
         sequence_checksum
     )
-
-    response.headers["Content-Type"] = REFGET_HEADER_JSON_WITH_CHARSET
 
     if res is None:
         # TODO: proper 404 for refget spec
@@ -240,11 +268,13 @@ async def refget_sequence_metadata(
         )
 
     contig = res[1]
-    return RefGetSequenceMetadataResponse(
-        metadata=RefGetSequenceMetadata(
-            md5=contig.md5,
-            ga4gh=contig.ga4gh,
-            length=contig.length,
-            aliases=contig.aliases,
-        ),
+    return RefGetJSONResponse(
+        RefGetSequenceMetadataResponse(
+            metadata=RefGetSequenceMetadata(
+                md5=contig.md5,
+                ga4gh=contig.ga4gh,
+                length=contig.length,
+                aliases=contig.aliases,
+            ),
+        ).model_dump(mode="json"),
     )

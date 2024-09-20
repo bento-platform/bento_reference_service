@@ -1,4 +1,4 @@
-FROM ghcr.io/bento-platform/bento_base_image:python-debian-2024.08.14
+FROM ghcr.io/bento-platform/bento_base_image:python-debian-2024.09.01
 
 LABEL org.opencontainers.image.description="Local development image for the Bento reference service."
 LABEL devcontainer.metadata='[{ \

@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "bento_reference_service"
-version = "0.3.0"
+version = "0.3.1"
 description = "Reference data (genomes & annotations) service for the Bento platform."
 authors = [
     "David Lougheed <david.lougheed@mail.mcgill.ca>",

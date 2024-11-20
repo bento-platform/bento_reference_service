@@ -9,9 +9,10 @@ from .shared_data import SARS_COV_2_FASTA_PATH
 REFGET_2_0_0_TYPE = {"group": "org.ga4gh", "artifact": "refget", "version": "2.0.0"}
 
 HEADERS_ACCEPT_PLAIN = {"Accept": "text/plain"}
+HEADERS_ACCEPT_MULTI_INC_JSON = {"Accept": "text/html,application/json;q=0.9"}
 
 
-def test_refget_service_info(test_client: TestClient, db_cleanup):
+def test_refget_service_info(test_client: TestClient):
     res = test_client.get("/sequence/service-info")
     rd = res.json()
 
@@ -27,11 +28,25 @@ def test_refget_service_info(test_client: TestClient, db_cleanup):
     assert "algorithms" in rd["refget"]
     assert "identifier_types" in rd["refget"]
 
+
+def test_refget_service_info_no_accept_header(test_client: TestClient):
+    res = test_client.get("/sequence/service-info", headers={"Accept": ""})
+    assert res.status_code == status.HTTP_200_OK
+    assert res.headers["content-type"] == "application/vnd.ga4gh.refget.v2.0.0+json"
+
+
+def test_refget_service_info_multi_accept(test_client: TestClient):
+    res = test_client.get("/sequence/service-info", headers=HEADERS_ACCEPT_MULTI_INC_JSON)
+    assert res.status_code == status.HTTP_200_OK
+    assert res.headers["content-type"] == "application/vnd.ga4gh.refget.v2.0.0+json"
+
+
+def test_refget_service_info_wrong_accept(test_client: TestClient):
     res = test_client.get("/sequence/service-info", headers=HEADERS_ACCEPT_PLAIN)
     assert res.status_code == status.HTTP_406_NOT_ACCEPTABLE
 
 
-def test_refget_sequence_not_found(test_client: TestClient, db_cleanup):
+def test_refget_sequence_not_found(test_client: TestClient):
     res = test_client.get(f"/sequence/does-not-exist", headers=HEADERS_ACCEPT_PLAIN)
     assert res.status_code == status.HTTP_404_NOT_FOUND
 

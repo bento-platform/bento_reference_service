@@ -1,6 +1,7 @@
 import io
 import math
 import orjson
+import re
 import typing
 
 from bento_lib.service_info.helpers import build_service_type, build_service_info_from_pydantic_config
@@ -35,6 +36,8 @@ REFGET_HEADER_TEXT_WITH_CHARSET = f"{REFGET_HEADER_TEXT}; charset={REFGET_CHARSE
 REFGET_HEADER_JSON = f"application/vnd.ga4gh.refget.v{REFGET_VERSION}+json"
 REFGET_HEADER_JSON_WITH_CHARSET = f"{REFGET_HEADER_JSON}; charset={REFGET_CHARSET}"
 
+ACCEPT_SPLIT = re.compile(r",\s*")
+
 
 class RefGetJSONResponse(Response):
     media_type = REFGET_HEADER_JSON
@@ -66,8 +69,15 @@ def check_accept_header(accept_header: str | None, mode: Literal["text", "json"]
         )
     )
 
-    if accept_header and accept_header not in valid_header_values:
-        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Not Acceptable")
+    if not accept_header:  # None or blank
+        return None  # valid - everything accepted
+
+    for accept in ACCEPT_SPLIT.split(accept_header):
+        if accept.split(";")[0] in valid_header_values:
+            return None  # valid - don't raise
+
+    # If none of the accept header values matched, we need to raise Not Acceptable
+    raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Not Acceptable")
 
 
 @refget_router.get("/service-info", dependencies=[authz_middleware.dep_public_endpoint()])

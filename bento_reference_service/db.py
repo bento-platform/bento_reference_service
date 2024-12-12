@@ -280,7 +280,7 @@ class Database(PgAsyncDatabase):
             feature_name=rec["feature_name"],
             feature_type=rec["feature_type"],
             source=rec["source"],
-            entries=tuple(map(Database.deserialize_genome_feature_entry, json.loads(rec["entries"] or "[]"))),
+            entries=list(map(Database.deserialize_genome_feature_entry, json.loads(rec["entries"] or "[]"))),
             gene_id=rec["gene_nat_id"],
             attributes=json.loads(rec["attributes"] or "{}"),
             parents=tuple(rec["parents"] or ()),  # tuple of parent IDs
@@ -524,6 +524,7 @@ class Database(PgAsyncDatabase):
 
                     feature_types.add((feature.feature_type,))
 
+                    e: GenomeFeatureEntry
                     entries.extend(
                         (
                             row_id,

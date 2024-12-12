@@ -246,7 +246,7 @@ class RefGetSequenceMetadata(BaseModel):
     md5: str
     ga4gh: str
     length: int
-    aliases: list[Alias]
+    aliases: tuple[Alias, ...]
 
 
 class RefGetSequenceMetadataResponse(BaseModel):

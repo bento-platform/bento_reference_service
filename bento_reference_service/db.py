@@ -369,12 +369,8 @@ class Database(PgAsyncDatabase):
             return f"${len(q_params) + 3}"  # plus 3: g_id, offset, limit at start
 
         if q:
-            if q_fzy:
-                q_op = "%"
-                query_param = _q_param(f"%{q}%")
-            else:
-                q_op = "~"
-                query_param = _q_param(q)
+            query_param = _q_param(q)
+            q_op = "%" if q_fzy else "~"
             gf_where_items.append(
                 f"""
                 gf.feature_id IN (
@@ -401,9 +397,8 @@ class Database(PgAsyncDatabase):
         if name:
             param = _q_param(name)
             if name_fzy:
-                param_fzy = _q_param(f"%{name}%")
                 gf_select_items.append(f"similarity(gf.feature_name, {param}) gf_fn_sml")
-                gf_where_items.append(f"gf.feature_name % {param_fzy}")
+                gf_where_items.append(f"gf.feature_name % {param}")
                 gf_order_items.append("gf_fn_sml DESC")
             else:
                 gf_where_items.append(f"gf.feature_name = {param}")

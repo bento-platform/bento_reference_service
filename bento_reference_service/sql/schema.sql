@@ -147,8 +147,10 @@ CREATE TABLE IF NOT EXISTS genome_feature_attributes (
     attr_val INTEGER NOT NULL REFERENCES genome_feature_attribute_values
 );
 CREATE INDEX IF NOT EXISTS genome_feature_attributes_feature_idx ON genome_feature_attributes (feature);
+CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_key_only_idx ON genome_feature_attributes (attr_key);
 CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_key_idx
     ON genome_feature_attributes (feature, attr_key);
+CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_val_only_idx ON genome_feature_attributes (attr_val);
 CREATE INDEX IF NOT EXISTS genome_feature_attributes_attr_val_idx
     ON genome_feature_attributes (feature, attr_val);
 

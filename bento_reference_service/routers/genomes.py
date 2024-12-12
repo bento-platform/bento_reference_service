@@ -33,9 +33,12 @@ async def get_genome_or_raise_404(
 
 @genome_router.get("", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_list(
-    db: DatabaseDependency, response_format: str | None = None
+    db: DatabaseDependency,
+    ids: Annotated[list[str] | None, Query()] = None,
+    taxon_id: str | None = None,
+    response_format: str | None = None,
 ) -> tuple[m.GenomeWithURIs, ...] | tuple[str, ...]:
-    genomes = await db.get_genomes(external_resource_uris=True)
+    genomes = await db.get_genomes(ids, taxon_id, external_resource_uris=True)
     if response_format == "id_list":
         return tuple(g.id for g in genomes)
     # else, format as full response

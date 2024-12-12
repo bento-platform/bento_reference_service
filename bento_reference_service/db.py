@@ -90,10 +90,28 @@ class Database(PgAsyncDatabase):
             taxon=OntologyTerm(id=rec["taxon_id"], label=rec["taxon_label"]),
         )
 
-    async def _select_genomes(self, g_id: str | None, external_resource_uris: bool) -> AsyncIterator[GenomeWithURIs]:
+    async def _select_genomes(
+        self,
+        g_ids: list[str] | None,
+        taxon_id: str | None = None,
+        external_resource_uris: bool = False,
+    ) -> AsyncIterator[GenomeWithURIs]:
+        where_items: list[str] = []
+        q_params: list[str | int] = []
+
+        def _q_param(pv: str | int) -> str:
+            q_params.append(pv)
+            return f"${len(q_params)}"
+
+        if g_ids:
+            g_id_ors = " OR ".join(f"g.id = {_q_param(g_id)}" for g_id in g_ids)
+            where_items.append(f"({g_id_ors})")
+
+        if taxon_id:
+            where_items.append(f"taxon_id = {_q_param(taxon_id)}")
+
         conn: asyncpg.Connection
         async with self.connect() as conn:
-            where_clause = "WHERE g.id = $1" if g_id is not None else ""
             res = await conn.fetch(
                 f"""
                 SELECT
@@ -122,19 +140,21 @@ class Database(PgAsyncDatabase):
                         )
                         SELECT jsonb_agg(contigs_tmp.*) FROM contigs_tmp
                     ) contigs
-                FROM genomes g {where_clause}
+                FROM genomes g {('WHERE ' + ' AND '.join(where_items)) if where_items else ''}
                 """,
-                *((g_id,) if g_id is not None else ()),
+                *q_params,
             )
 
         for r in map(lambda g: self.deserialize_genome(g, external_resource_uris), res):
             yield r
 
-    async def get_genomes(self, external_resource_uris: bool = False) -> tuple[GenomeWithURIs, ...]:
-        return tuple([r async for r in self._select_genomes(None, external_resource_uris)])
+    async def get_genomes(
+        self, g_ids: list[str] | None = None, taxon_id: str | None = None, external_resource_uris: bool = False
+    ) -> tuple[GenomeWithURIs, ...]:
+        return tuple([r async for r in self._select_genomes(g_ids, taxon_id, external_resource_uris)])
 
-    async def get_genome(self, g_id: str, external_resource_uris: bool = False) -> GenomeWithURIs | None:
-        return await anext(self._select_genomes(g_id, external_resource_uris), None)
+    async def get_genome(self, g_id: str, *, external_resource_uris: bool = False) -> GenomeWithURIs | None:
+        return await anext(self._select_genomes([g_id], external_resource_uris=external_resource_uris), None)
 
     async def delete_genome(self, g_id: str) -> None:
         conn: asyncpg.Connection
@@ -165,7 +185,7 @@ class Database(PgAsyncDatabase):
                 chk_norm,
             )
 
-        genome_res = (await anext(self._select_genomes(contig_res["genome_id"], False), None)) if contig_res else None
+        genome_res = (await anext(self._select_genomes([contig_res["genome_id"]]), None)) if contig_res else None
         if genome_res is None or contig_res is None:
             return None
         return genome_res, self.deserialize_contig(contig_res)

@@ -1,4 +1,4 @@
-FROM ghcr.io/bento-platform/bento_base_image:python-debian-2024.11.01
+FROM ghcr.io/bento-platform/bento_base_image:python-debian-2024.12.01
 
 WORKDIR /reference
 

@@ -119,6 +119,7 @@ async def test_genome_features_summary(db: Database, db_cleanup):
         (SARS_COV_2_GENOME_ID, dict(q="ORF1ab"), 3),
         (SARS_COV_2_GENOME_ID, dict(q="ENSSASG00005000002"), 1),
         (SARS_COV_2_GENOME_ID, dict(q="protein_coding", q_fzy=True, limit=100), 24),
+        (SARS_COV_2_GENOME_ID, dict(q="tein_cod", q_fzy=True, limit=100), 24),
         # hg38 subset
         (HG38_CHR1_F100K_GENOME_ID, dict(position="chr1:11869-"), 3),
         (HG38_CHR1_F100K_GENOME_ID, dict(start=12000), 10),

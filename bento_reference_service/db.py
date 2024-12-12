@@ -280,7 +280,7 @@ class Database(PgAsyncDatabase):
             feature_name=rec["feature_name"],
             feature_type=rec["feature_type"],
             source=rec["source"],
-            entries=tuple(map(Database.deserialize_genome_feature_entry, json.loads(rec["entries"] or "[]"))),
+            entries=list(map(Database.deserialize_genome_feature_entry, json.loads(rec["entries"] or "[]"))),
             gene_id=rec["gene_nat_id"],
             attributes=json.loads(rec["attributes"] or "{}"),
             parents=tuple(rec["parents"] or ()),  # tuple of parent IDs
@@ -369,8 +369,12 @@ class Database(PgAsyncDatabase):
             return f"${len(q_params) + 3}"  # plus 3: g_id, offset, limit at start
 
         if q:
-            query_param = _q_param(q)
-            q_op = "%" if q_fzy else "~"
+            if q_fzy:
+                q_op = "%"
+                query_param = _q_param(f"%{q}%")
+            else:
+                q_op = "~"
+                query_param = _q_param(q)
             gf_where_items.append(
                 f"""
                 gf.feature_id IN (
@@ -397,8 +401,9 @@ class Database(PgAsyncDatabase):
         if name:
             param = _q_param(name)
             if name_fzy:
+                param_fzy = _q_param(f"%{name}%")
                 gf_select_items.append(f"similarity(gf.feature_name, {param}) gf_fn_sml")
-                gf_where_items.append(f"gf.feature_name % {param}")
+                gf_where_items.append(f"gf.feature_name % {param_fzy}")
                 gf_order_items.append("gf_fn_sml DESC")
             else:
                 gf_where_items.append(f"gf.feature_name = {param}")
@@ -524,6 +529,7 @@ class Database(PgAsyncDatabase):
 
                     feature_types.add((feature.feature_type,))
 
+                    e: GenomeFeatureEntry
                     entries.extend(
                         (
                             row_id,

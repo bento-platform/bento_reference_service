@@ -30,6 +30,22 @@ async def test_create_genome(db: Database, db_cleanup):
     await _set_up_hg38_subset_genome(db)
 
 
+async def test_get_genomes(db: Database, db_cleanup):
+    # start with two genomes, so we validate that we get the right one(s)
+    await _set_up_sars_cov_2_genome(db)
+    await _set_up_hg38_subset_genome(db)
+
+    assert len(await db.get_genomes(g_ids=[SARS_COV_2_GENOME_ID, TEST_GENOME_HG38_CHR1_F100K_OBJ.id])) == 2
+
+    res = await db.get_genomes(g_ids=[SARS_COV_2_GENOME_ID])
+    assert len(res) == 1
+    assert res[0].id == SARS_COV_2_GENOME_ID
+
+    res = await db.get_genomes(taxon_id="NCBITaxon:9606")
+    assert len(res) == 1
+    assert res[0].id == TEST_GENOME_HG38_CHR1_F100K_OBJ.id
+
+
 @pytest.mark.parametrize(
     "checksum,genome_id,contig_name",
     [

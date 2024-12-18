@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS genomes (
     taxon_id VARCHAR(31) NOT NULL,  -- e.g., NCBITaxon:9606
     taxon_label TEXT NOT NULL  -- e.g., Homo sapiens
 );
+CREATE INDEX IF NOT EXISTS genomes_id_trgm_idx ON genomes USING GIN (id gin_trgm_ops);
 
 -- Migration (v0.2.0): add genomes.gff3_uri and genomes.gff3_tbi_uri if they do not exist:
 ALTER TABLE genomes
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS genome_aliases (
     PRIMARY KEY (genome_id, alias)
 );
 CREATE INDEX IF NOT EXISTS genome_aliases_genome_idx ON genome_aliases (genome_id);
+CREATE INDEX IF NOT EXISTS genome_aliases_alias_trgm_idx ON genome_aliases USING GIN (alias gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS genome_contigs (
     genome_id VARCHAR(31) NOT NULL REFERENCES genomes ON DELETE CASCADE,

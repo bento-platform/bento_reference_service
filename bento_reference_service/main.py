@@ -65,7 +65,9 @@ async def access_log_middleware(request: Request, call_next) -> Response:
     start_time = time.perf_counter_ns()
 
     service_logger = structlog.stdlib.get_logger(f"{BENTO_SERVICE_KIND}.logger")
-    response = JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=internal_server_error(logger=service_logger))
+    response = JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=internal_server_error(logger=service_logger)
+    )
     try:
         response = await call_next(request)
     except Exception as e:
@@ -83,7 +85,7 @@ async def access_log_middleware(request: Request, call_next) -> Response:
         access_logger = structlog.stdlib.get_logger(f"{BENTO_SERVICE_KIND}.access")
         await access_logger.ainfo(
             # The message format mirrors the original uvicorn access message, but with response duration added.
-            f"{client_host}:{client_port} - \"{http_method} {url} HTTP/{http_version}\" {status_code} "
+            f'{client_host}:{client_port} - "{http_method} {url} HTTP/{http_version}" {status_code} '
             f"({duration / 10e9:.4f}s)",
             http={
                 "url": url,
@@ -96,6 +98,7 @@ async def access_log_middleware(request: Request, call_next) -> Response:
         )
 
         return response
+
 
 # Attach different routers to the app, for:
 # - genome listing

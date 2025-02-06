@@ -71,7 +71,7 @@ async def access_log_middleware(request: Request, call_next) -> Response:
     try:
         response = await call_next(request)
     except Exception as e:
-        await service_logger.aexception("Uncaught exception", exc_info=e)
+        service_logger.exception("Uncaught exception", exc_info=e)
     finally:
         duration = time.perf_counter_ns() - start_time
 

@@ -129,8 +129,7 @@ async def refget_sequence(
     try:
         check_accept_header(request.headers.get("Accept"), mode="text")
     except HTTPException as e:
-        # don't log actual value to prevent log injection:
-        await logger.aerror(f"not acceptable: bad Accept header value")
+        logger.error(f"not acceptable: bad Accept header value")  # don't log actual value to prevent log injection
         return Response(status_code=e.status_code, content=e.detail.encode("ascii"))
 
     # Don't use FastAPI's auto-Header tool for the Range header
@@ -176,10 +175,10 @@ async def refget_sequence(
         try:
             intervals = sr.parse_range_header(range_header, contig.length, refget_mode=True)
         except se.StreamingBadRange as e:
-            await logger.aexception("bad request: bad range", e)
+            logger.error(f"bad request: bad range - {e}")
             return REFGET_BAD_REQUEST
         except se.StreamingRangeNotSatisfiable as e:
-            await logger.aerror("range not satisfiable", e)
+            logger.error(f"range not satisfiable: {e}")
             return REFGET_RANGE_NOT_SATISFIABLE
 
         start_final = intervals[0][0]
@@ -187,45 +186,30 @@ async def refget_sequence(
 
     if start_final > end_final:
         if not contig.circular:
-            await logger.aerror(
-                "range not satisfiable: contig is not circular and start > end", start=start_final, end=end_final
-            )
+            logger.error("range not satisfiable: start > end")
             return REFGET_RANGE_NOT_SATISFIABLE
         else:
             raise NotImplementedError()  # TODO: support circular contig querying
 
-    contig_length = contig.length
-
     # Final bounds-checking - needed for if we're using query parameters
-    if start_final >= contig_length:
+    if start_final >= contig.length:
         # start is 0-based; so if it's set to contig.length or more, it is out of range.
-        await logger.aerror(
-            "bad request: start cannot be past the end of the sequence", start=start_final, contig_length=contig_length
-        )
+        logger.error("bad request: start cannot be past the end of the sequence")
         return REFGET_BAD_REQUEST
-    if end_final > contig_length:
+    if end_final > contig.length:
         # end is 0-based exclusive
-        await logger.aerror(
-            "bad request: end cannot be past the end of the sequence", end=end_final, contig_length=contig_length
-        )
+        logger.error("bad request: end cannot be past the end of the sequence")
         return REFGET_BAD_REQUEST
 
-    bytes_requested = end_final - start_final
-    substring_limit = config.response_substring_limit
-
-    if bytes_requested > config.response_substring_limit:
-        await logger.aerror(
-            "range not satisfiable: request for too many bytes",
-            bytes_requested=bytes_requested,
-            substring_limit=substring_limit,
-        )
+    if end_final - start_final > config.response_substring_limit:
+        logger.error("range not satisfiable: request for too many bytes")
         return REFGET_RANGE_NOT_SATISFIABLE
 
     end_final_inclusive: int = end_final - 1  # 0-based, inclusive-indexed
 
     # Set content length and range based on final start/end values
-    headers["Content-Length"] = str(bytes_requested)
-    headers["Content-Range"] = f"bytes {start_final}-{end_final_inclusive}/{contig_length}"
+    headers["Content-Length"] = str(end_final - start_final)
+    headers["Content-Range"] = f"bytes {start_final}-{end_final_inclusive}/{contig.length}"
 
     # Translate contig fetch into FASTA fetch using FAI data:
     #  - since FASTAs can have newlines, we need to account for the difference between bytes requested + the bases we

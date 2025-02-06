@@ -211,7 +211,8 @@ async def iter_features(
                 except Exception as e:
                     await logger.aexception(
                         f"Could not process feature {i}: {feature_type=}, {feature_raw_attributes=}; encountered "
-                        f"exception", exc_info=e
+                        f"exception",
+                        exc_info=e,
                     )
 
                 total_processed += 1

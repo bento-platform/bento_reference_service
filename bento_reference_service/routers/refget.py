@@ -176,10 +176,10 @@ async def refget_sequence(
         try:
             intervals = sr.parse_range_header(range_header, contig.length, refget_mode=True)
         except se.StreamingBadRange as e:
-            await logger.aexception("bad request: bad range", e)
+            await logger.aexception("bad request: bad range", exc_info=e)
             return REFGET_BAD_REQUEST
         except se.StreamingRangeNotSatisfiable as e:
-            await logger.aerror("range not satisfiable", e)
+            await logger.aexception("range not satisfiable", exc_info=e)
             return REFGET_RANGE_NOT_SATISFIABLE
 
         start_final = intervals[0][0]

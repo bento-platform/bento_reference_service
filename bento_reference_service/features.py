@@ -209,11 +209,10 @@ async def iter_features(
                         )
 
                 except Exception as e:
-                    await logger.aerror(
+                    await logger.aexception(
                         f"Could not process feature {i}: {feature_type=}, {feature_raw_attributes=}; encountered "
-                        f"exception: {e}"
+                        f"exception", exc_info=e
                     )
-                    await logger.aerror(traceback.format_exc())
 
                 total_processed += 1
                 if total_processed % GFF_LOG_PROGRESS_INTERVAL == 0:
@@ -255,7 +254,7 @@ async def ingest_features(
     #  - these contig batches are created by the generator produced iter_features(...)
     #  - we use contigs as batches rather than a fixed batch size so that we are guaranteed to get parents alongside
     #    their child features in the same batch, so we can assign surrogate keys correctly.
-    while data := (await anext(features_to_ingest, ())):
+    async for data in features_to_ingest:
         s = datetime.now()
         await logger.adebug(f"ingest_gene_feature_annotation: ingesting batch of {len(data)} features")
         await db.bulk_ingest_genome_features(data)
@@ -330,11 +329,11 @@ async def ingest_features_task(
         await logger.ainfo("task downloading gene feature files")
         gff3_gz_path, gff3_gz_tbi_path = await download_feature_files(genome, config, drs_resolver, logger)
     except Exception as e:
+        await logger.aexception("task encountered exception while downloading feature files", exc_info=e)
         err = (
             f"task {task_id}: encountered exception while downloading feature files: {e}; traceback: "
             f"{traceback.format_exc()}"
         )
-        await logger.aerror(err)
         await db.update_task_status(task_id, "error", message=err)
         raise AnnotationIngestError(err)
 
@@ -350,7 +349,7 @@ async def ingest_features_task(
 
     except Exception as e:
         # binding takes care of extra data for log (task and genome ID):
-        await logger.aexception("encountered exception while ingesting features", e)
+        await logger.aexception("encountered exception while ingesting features", exc_info=e)
         err = (
             f"task {task_id}: encountered exception while ingesting features: {e}; traceback: {traceback.format_exc()}"
         )

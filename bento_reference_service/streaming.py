@@ -2,7 +2,6 @@ import aiofiles
 import aiofiles.os
 import aiohttp
 import json
-import logging
 import pathlib
 
 from bento_lib.drs.exceptions import DrsRecordNotFound, DrsRequestError
@@ -12,6 +11,7 @@ from bento_lib.streaming.file import stream_file
 from bento_lib.streaming.range import parse_range_header
 from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
+from structlog.stdlib import BoundLogger
 from typing import AsyncIterator
 from urllib.parse import urlparse
 
@@ -63,28 +63,26 @@ async def stream_http(
                 yield chunk
 
 
-async def drs_bytes_url_from_uri(
-    config: Config, drs_resolver: DrsResolver, logger: logging.Logger, drs_uri: str
-) -> str:
+async def drs_bytes_url_from_uri(config: Config, drs_resolver: DrsResolver, logger: BoundLogger, drs_uri: str) -> str:
     session_kwargs = {"connector": tcp_connector(config)}
 
     try:
         drs_obj = await drs_resolver.fetch_drs_record_by_uri_async(drs_uri, session_kwargs)
     except DrsRecordNotFound as e:
-        logger.error(str(e))
+        await logger.aerror(str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"A Not Found error was encountered while accessing DRS record for genome",
         )
     except DrsRequestError as e:
-        logger.error(str(e))
+        await logger.aerror(str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error was encountered while accessing DRS record for genome",
         )
 
     # TODO: this doesn't support access IDs / the full DRS spec
-    logger.debug(f"{drs_uri}: got DRS response {json.dumps(drs_obj)}")
+    await logger.adebug(f"{drs_uri}: got DRS response {json.dumps(drs_obj)}")
     https_access = next(filter(lambda am: am["type"] == "https", drs_obj.get("access_methods", [])), None)
     if https_access is None:
         raise HTTPException(
@@ -97,11 +95,13 @@ async def drs_bytes_url_from_uri(
 async def stream_from_uri(
     config: Config,
     drs_resolver: DrsResolver,
-    logger: logging.Logger,
+    logger: BoundLogger,
     original_uri: str,
     range_header: str | None,
     impose_response_limit: bool,
 ) -> tuple[int, int, AsyncIterator[bytes]]:
+    logger = logger.bind(streaming_uri=original_uri)
+
     stream: AsyncIterator[bytes]
 
     try:
@@ -115,11 +115,13 @@ async def stream_from_uri(
             file_size = (await aiofiles.os.stat(file_path)).st_size
             intervals = parse_range_header(range_header, file_size)
 
+            await logger.adebug("streaming from file", file_path=file_path, file_size=file_size)
+
             # TODO: for now, only support returning a single range of bytes; take the start and end from the first
             #  interval given:
             # TODO: support multipart/byterange responses
             stream = stream_file(
-                pathlib.Path(parsed_uri.path),
+                file_path,
                 intervals[0],
                 config.file_response_chunk_size,
                 yield_content_length_as_first_8=True,
@@ -138,7 +140,7 @@ async def stream_from_uri(
             )
 
             # Don't pass Authorization header to possibly external sources
-            logger.debug(f"Streaming from HTTP URL: {url}")
+            await logger.adebug("streaming from HTTP URL")
             stream = stream_http(
                 config,
                 url,
@@ -167,7 +169,7 @@ async def stream_from_uri(
 async def generate_uri_streaming_response(
     config: Config,
     drs_resolver: DrsResolver,
-    logger: logging.Logger,
+    logger: BoundLogger,
     uri: str,
     range_header: str | None,
     media_type: str,
@@ -175,6 +177,8 @@ async def generate_uri_streaming_response(
     support_byte_ranges: bool = False,
     extra_response_headers: dict[str, str] | None = None,
 ):
+    logger = logger.bind(streaming_uri=uri)
+
     try:
         content_length, status_code, stream = await stream_from_uri(
             config, drs_resolver, logger, uri, range_header, impose_response_limit
@@ -199,13 +203,13 @@ async def generate_uri_streaming_response(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid range header value: {range_header}"
         )
     except se.StreamingProxyingError as e:  #
-        logger.error(f"Encountered streaming error for {uri}: {e}")
+        await logger.aerror(f"Encountered streaming error for {uri}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     except se.StreamingUnsupportedURIScheme as e:  # Unsupported URI scheme
         err = f"Unsupported URI scheme in genome record: {e}"
-        logger.error(err)
+        await logger.aerror(err)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=err)
     except se.StreamingBadURI as e:  # URI parsing error
         err = f"Bad URI in genome record: {e}"
-        logger.error(err)
+        await logger.aerror(err)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=err)

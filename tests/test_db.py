@@ -1,6 +1,5 @@
-import logging
-
 import pytest
+import structlog
 
 from pathlib import Path
 
@@ -92,7 +91,7 @@ async def test_mark_running_as_error(db: Database, db_cleanup):
 
 
 # TODO: fixture
-async def _set_up_sars_cov_2_genome_and_features(db: Database, logger: logging.Logger):
+async def _set_up_sars_cov_2_genome_and_features(db: Database, logger: structlog.BoundLogger):
     await _set_up_sars_cov_2_genome(db)
 
     # prerequesite: ingest features
@@ -101,7 +100,7 @@ async def _set_up_sars_cov_2_genome_and_features(db: Database, logger: logging.L
     await ingest_features(await db.get_genome(SARS_COV_2_GENOME_ID), gff3_gz_path, gff3_gz_tbi_path, db, logger)
 
 
-async def _set_up_hg38_subset_genome_and_features(db: Database, logger: logging.Logger):
+async def _set_up_hg38_subset_genome_and_features(db: Database, logger: structlog.BoundLogger):
     await _set_up_hg38_subset_genome(db)
 
     # prerequesite: ingest features
@@ -117,7 +116,7 @@ GENOME_ID_TO_SET_UP_FN = {
 
 
 async def test_genome_features_summary(db: Database, db_cleanup):
-    logger = logging.getLogger(__name__)
+    logger = structlog.stdlib.get_logger(__name__)
     await _set_up_sars_cov_2_genome_and_features(db, logger)
     s = await db.genome_feature_types_summary(SARS_COV_2_GENOME_ID)
     assert sum(s.values()) == 49  # total # of features, divided by type in summary response
@@ -147,7 +146,7 @@ async def test_genome_features_summary(db: Database, db_cleanup):
     ],
 )
 async def test_query_genome_features(db: Database, db_cleanup, genome_id: str, args: dict, n_results: int):
-    await GENOME_ID_TO_SET_UP_FN[genome_id](db, logging.getLogger(__name__))
+    await GENOME_ID_TO_SET_UP_FN[genome_id](db, structlog.stdlib.get_logger(__name__))
     res, page = await db.query_genome_features(genome_id, **args)
     assert len(res) == n_results
     assert page["total"] == n_results

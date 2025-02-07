@@ -90,4 +90,4 @@ def get_logger(config: ConfigDependency) -> structlog.stdlib.BoundLogger:
     return structlog.stdlib.get_logger(f"{BENTO_SERVICE_KIND}.logger")
 
 
-LoggerDependency = Annotated[logging.Logger, Depends(get_logger)]
+LoggerDependency = Annotated[structlog.stdlib.BoundLogger, Depends(get_logger)]

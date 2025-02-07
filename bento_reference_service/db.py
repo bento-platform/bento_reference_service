@@ -1,10 +1,10 @@
 import asyncpg
 import json
-import logging
 from bento_lib.db.pg_async import PgAsyncDatabase
 from fastapi import Depends
 from functools import lru_cache
 from pathlib import Path
+from structlog.stdlib import BoundLogger
 from typing import Annotated, AsyncIterator, Literal
 
 from .config import Config, ConfigDependency
@@ -27,9 +27,9 @@ SCHEMA_PATH = Path(__file__).parent / "sql" / "schema.sql"
 
 
 class Database(PgAsyncDatabase):
-    def __init__(self, config: Config, logger: logging.Logger):
+    def __init__(self, config: Config, logger: BoundLogger):
         self._config: Config = config
-        self.logger: logging.Logger = logger
+        self.logger: BoundLogger = logger
         super().__init__(config.database_uri, SCHEMA_PATH)
 
     @staticmethod
@@ -252,7 +252,7 @@ class Database(PgAsyncDatabase):
                         contig_alias_tuples,
                     )
 
-        self.logger.debug(f"Created genome: {g}")
+        await self.logger.adebug(f"Created genome: {g}")
 
         return await self.get_genome(g.id, external_resource_uris=return_external_resource_uris)
 
@@ -586,7 +586,9 @@ class Database(PgAsyncDatabase):
                         try:
                             parents.append((row_id, feature_row_ids[p]))
                         except KeyError as e:
-                            self.logger.error(f"Could not find parent row ID '{p}' for feature {feature.feature_id}")
+                            await self.logger.aerror(
+                                f"Could not find parent row ID '{p}' for feature {feature.feature_id}"
+                            )
                             raise e
 
                     feature_tuples.append(
@@ -603,7 +605,7 @@ class Database(PgAsyncDatabase):
                         )
                     )
 
-                self.logger.debug(
+                await self.logger.adebug(
                     f"bulk_ingest_genome_features: have {len(feature_types)} feature types for batch "
                     f"({[ft[0] for ft in feature_types][:20]})"
                 )
@@ -611,7 +613,7 @@ class Database(PgAsyncDatabase):
                     "INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING", feature_types
                 )
 
-                self.logger.debug(f"bulk_ingest_genome_features: have {len(feature_tuples)} features for batch")
+                await self.logger.adebug(f"bulk_ingest_genome_features: have {len(feature_tuples)} features for batch")
                 await conn.copy_records_to_table(
                     "genome_features",
                     columns=[
@@ -629,7 +631,7 @@ class Database(PgAsyncDatabase):
                 )
 
                 new_attribute_keys: list[tuple[int, str]] = [(ik, sk) for sk, ik in new_attr_key_ids.items()]
-                self.logger.debug(
+                await self.logger.adebug(
                     f"bulk_ingest_genome_features: have {len(new_attribute_keys)} new feature attribute keys for batch"
                 )
                 await conn.copy_records_to_table(
@@ -637,7 +639,7 @@ class Database(PgAsyncDatabase):
                 )
 
                 new_attribute_values: list[tuple[int, str]] = [(iv, sv) for sv, iv in new_attr_value_ids.items()]
-                self.logger.debug(
+                await self.logger.adebug(
                     f"bulk_ingest_genome_features: have {len(new_attribute_values)} new feature attribute values for "
                     f"batch"
                 )
@@ -645,7 +647,7 @@ class Database(PgAsyncDatabase):
                     "genome_feature_attribute_values", columns=["id", "attr_val"], records=new_attribute_values
                 )
 
-                self.logger.debug(
+                await self.logger.adebug(
                     f"bulk_ingest_genome_features: have {len(attributes)} feature attribute records for batch"
                 )
                 await conn.copy_records_to_table(
@@ -658,7 +660,7 @@ class Database(PgAsyncDatabase):
                     records=attributes,
                 )
 
-                self.logger.debug(f"bulk_ingest_genome_features: have {len(entries)} feature entries for batch")
+                await self.logger.adebug(f"bulk_ingest_genome_features: have {len(entries)} feature entries for batch")
                 await conn.copy_records_to_table(
                     "genome_feature_entries",
                     columns=[
@@ -672,7 +674,9 @@ class Database(PgAsyncDatabase):
                     records=entries,
                 )
 
-                self.logger.debug(f"bulk_ingest_genome_features: have {len(parents)} feature parent records for batch")
+                await self.logger.adebug(
+                    f"bulk_ingest_genome_features: have {len(parents)} feature parent records for batch"
+                )
                 await conn.copy_records_to_table(
                     "genome_feature_parents",
                     columns=[

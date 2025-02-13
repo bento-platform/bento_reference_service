@@ -41,9 +41,12 @@ async def tasks_create(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Something went wrong when creating the task."
         )
 
-    # currently, ingest_features is the only task type, so we don't need an if-statement to decide which task to
-    # dispatch.
-    background_tasks.add_task(ingest_features_task, genome_id, task_id, config, db, drs_resolver, logger)
+    if task.kind == "ingest_features":
+        # currently, ingest_features is the only task type, so we don't need an if-statement to decide which task to
+        # dispatch.
+        background_tasks.add_task(ingest_features_task, genome_id, task_id, config, db, drs_resolver, logger)
+    else:  # pragma: no cover
+        raise NotImplementedError()
 
     return task
 

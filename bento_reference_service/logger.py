@@ -1,4 +1,3 @@
-import logging
 import structlog
 
 from bento_lib.logging.structured.configure import configure_structlog_from_bento_config, configure_structlog_uvicorn

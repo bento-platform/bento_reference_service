@@ -1,7 +1,8 @@
 import pytest
-import structlog
+import structlog.stdlib
 
 from pathlib import Path
+from structlog.stdlib import BoundLogger
 
 from bento_reference_service.db import Database
 from bento_reference_service.features import ingest_features
@@ -91,7 +92,7 @@ async def test_mark_running_as_error(db: Database, db_cleanup):
 
 
 # TODO: fixture
-async def _set_up_sars_cov_2_genome_and_features(db: Database, logger: structlog.BoundLogger):
+async def _set_up_sars_cov_2_genome_and_features(db: Database, logger: BoundLogger):
     await _set_up_sars_cov_2_genome(db)
 
     # prerequesite: ingest features
@@ -100,7 +101,7 @@ async def _set_up_sars_cov_2_genome_and_features(db: Database, logger: structlog
     await ingest_features(await db.get_genome(SARS_COV_2_GENOME_ID), gff3_gz_path, gff3_gz_tbi_path, db, logger)
 
 
-async def _set_up_hg38_subset_genome_and_features(db: Database, logger: structlog.BoundLogger):
+async def _set_up_hg38_subset_genome_and_features(db: Database, logger: BoundLogger):
     await _set_up_hg38_subset_genome(db)
 
     # prerequesite: ingest features

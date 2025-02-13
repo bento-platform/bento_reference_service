@@ -140,7 +140,7 @@ async def stream_from_uri(
             )
 
             # Don't pass Authorization header to possibly external sources
-            await logger.adebug("streaming from HTTP URL")
+            await logger.adebug("streaming from HTTP URL", proxied_url=url)
             stream = stream_http(
                 config,
                 url,

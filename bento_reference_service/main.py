@@ -52,53 +52,9 @@ app = BentoFastAPI(
     BENTO_SERVICE_INFO,
     SERVICE_TYPE,
     __version__,
+    configure_structlog_access_logger=True,  # Set up custom access log middleware to replace the default Uvicorn one
     lifespan=lifespan,
 )
-
-
-# Set up custom access log middleware to replace the default Uvicorn one
-#  - This way, we can structure the access data in a better way.
-# Adapted from https://gist.github.com/nymous/f138c7f06062b7c43c060bf03759c29e
-# Licensed under the terms of the MIT license, (c) Thomas Gaudin
-@app.middleware("http")
-async def access_log_middleware(request: Request, call_next) -> Response:
-    start_time = time.perf_counter_ns()
-
-    service_logger = structlog.stdlib.get_logger(f"{BENTO_SERVICE_KIND}.logger")
-    response = JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content=internal_server_error(logger=service_logger)
-    )
-    try:
-        response = await call_next(request)
-    except Exception as e:
-        await service_logger.aexception("uncaught exception", exc_info=e)
-    finally:
-        duration = time.perf_counter_ns() - start_time
-
-        status_code = response.status_code
-        url = get_path_with_query_string(request.scope)
-        client_host = request.client.host
-        client_port = request.client.port
-        http_method = request.method
-        http_version = request.scope["http_version"]
-
-        access_logger = structlog.stdlib.get_logger(f"{BENTO_SERVICE_KIND}.access")
-        await access_logger.ainfo(
-            # The message format mirrors the original uvicorn access message, but with response duration added.
-            f'{client_host}:{client_port} - "{http_method} {url} HTTP/{http_version}" {status_code} '
-            f"({duration / 10e9:.4f}s)",
-            http={
-                "url": url,
-                "status_code": status_code,
-                "method": http_method,
-                "version": http_version,
-            },
-            network={"client": {"host": client_host, "port": client_port}},
-            duration=duration,
-        )
-
-        return response
-
 
 # Attach different routers to the app, for:
 # - genome listing

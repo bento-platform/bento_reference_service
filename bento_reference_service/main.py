@@ -56,7 +56,6 @@ app = BentoFastAPI(
     lifespan=lifespan,
 )
 
-
 # Attach different routers to the app, for:
 # - genome listing
 # - asynchronous task querying

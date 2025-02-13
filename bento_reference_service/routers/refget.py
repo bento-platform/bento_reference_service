@@ -130,7 +130,7 @@ async def refget_sequence(
         check_accept_header(request.headers.get("Accept"), mode="text")
     except HTTPException as e:
         # don't log actual value to prevent log injection:
-        await logger.aerror(f"not acceptable: bad Accept header value")
+        await logger.aerror("not acceptable: bad Accept header value")
         return Response(status_code=e.status_code, content=e.detail.encode("ascii"))
 
     # Don't use FastAPI's auto-Header tool for the Range header

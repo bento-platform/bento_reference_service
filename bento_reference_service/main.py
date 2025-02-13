@@ -1,12 +1,6 @@
-import structlog
-import time
-
 from bento_lib.apps.fastapi import BentoFastAPI
-from bento_lib.responses.errors import internal_server_error
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response, status
-from fastapi.responses import JSONResponse
-from uvicorn.protocols.utils import get_path_with_query_string
+from fastapi import FastAPI
 
 from . import __version__
 from .authz import authz_middleware

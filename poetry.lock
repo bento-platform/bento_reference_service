@@ -317,7 +317,7 @@ flask = ["flask (>=2.2.5,<4)"]
 type = "git"
 url = "https://github.com/bento-platform/bento_lib.git"
 reference = "feat/logging/structured"
-resolved_reference = "a5367d58e5d71499d13077e496a68cc3218ece11"
+resolved_reference = "d15027a976dcde7460aa7d09f8b19cbab8236f0a"
 
 [[package]]
 name = "black"

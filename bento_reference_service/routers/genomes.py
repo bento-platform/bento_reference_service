@@ -63,7 +63,7 @@ async def genomes_create(
                 detail=f"Could not find genome with ID {genome.id} after creation",
             )
     except asyncpg.exceptions.UniqueViolationError as e:
-        logger.error(f"UniqueViolationError encountered during genome creation: {e} {traceback.format_exc()}")
+        await logger.aerror(f"UniqueViolationError encountered during genome creation: {e} {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Genome with ID {genome.id} already exists",

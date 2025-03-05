@@ -33,7 +33,7 @@ pysam = "~0.22.1"
 jsonschema = "^4.23.0"
 pydantic-settings = "^2.1.0"
 asyncpg = "^0.30.0"
-structlog = "^24.4.0"
+structlog = "^25.1.0"
 
 [tool.poetry.group.dev.dependencies]
 aioresponses = "^0.7.6"

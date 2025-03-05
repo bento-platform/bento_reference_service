@@ -28,6 +28,7 @@ from .shared_functions import create_genome_with_permissions
 
 @pytest.fixture(name="log_output")
 def fixture_log_output():
+    # INFO: see https://www.structlog.org/en/stable/testing.html
     return structlog.testing.LogCapture()
 
 
@@ -35,6 +36,8 @@ def fixture_log_output():
 def fixture_configure_structlog(log_output):
     logging.getLogger("asyncio").setLevel(logging.WARN)
     logging.getLogger("httpx").setLevel(logging.WARN)
+
+    # INFO: see https://www.structlog.org/en/stable/testing.html
     structlog.configure(processors=[log_output])
 
 

@@ -46,6 +46,7 @@ app = BentoFastAPI(
     BENTO_SERVICE_INFO,
     SERVICE_TYPE,
     __version__,
+    configure_structlog_access_logger=True,  # Set up custom access log middleware to replace the default Uvicorn one
     lifespan=lifespan,
 )
 

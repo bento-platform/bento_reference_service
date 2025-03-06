@@ -1,12 +1,12 @@
 import aiofiles
-import logging
 import pysam
 import traceback
 
 from bento_lib.drs.resolver import DrsResolver
 from datetime import datetime
 from pathlib import Path
-from typing import Generator
+from structlog.stdlib import BoundLogger
+from typing import AsyncIterator
 from urllib.parse import unquote as url_unquote
 from uuid import uuid4
 
@@ -113,14 +113,14 @@ def extract_feature_name(record, attributes: dict[str, list[str]]) -> str | None
             return None
 
 
-def iter_features(
+async def iter_features(
     # parameters:
     genome: m.Genome,
     gff_path: Path,
     gff_index_path: Path,
     # dependencies:
-    logger: logging.Logger,
-) -> Generator[tuple[m.GenomeFeature, ...], None, None]:
+    logger: BoundLogger,
+) -> AsyncIterator[tuple[m.GenomeFeature, ...]]:
     """
     Given genome and a GFF3 for the genome, iterate through the lines of the GFF3 and build genome feature objects.
     """
@@ -132,14 +132,14 @@ def iter_features(
     with pysam.TabixFile(str(gff_path), index=str(gff_index_path)) as gff:
         for contig in genome.contigs:
             contig_name = contig.name
-            logger.info(f"Indexing features from contig {contig_name}")
+            await logger.ainfo(f"Indexing features from contig {contig_name}")
 
             contig_features_by_id: dict[str, m.GenomeFeature] = {}
 
             try:
                 fetch_iter = gff.fetch(reference=contig.name, parser=pysam.asGFF3())
             except ValueError as e:
-                logger.warning(f"Could not find contig with name {contig_name} in GFF3; skipping... ({e})")
+                await logger.awarning(f"Could not find contig with name {contig_name} in GFF3; skipping... ({e})")
                 continue
 
             for i, rec in enumerate(fetch_iter):
@@ -163,7 +163,7 @@ def iter_features(
 
                     feature_id = extract_feature_id(rec, record_attributes)
                     if feature_id is None:
-                        logger.warning(
+                        await logger.awarning(
                             f"Skipping unsupported feature {i}: type={feature_type}, no ID retrieval; "
                             f"{contig_name}:{start_pos}-{end_pos}"
                         )
@@ -171,7 +171,7 @@ def iter_features(
 
                     feature_name = extract_feature_name(rec, record_attributes)
                     if feature_name is None:
-                        logger.warning(
+                        await logger.awarning(
                             f"Using ID as name for feature {i}: {feature_id} {contig_name}:{start_pos}-{end_pos}"
                         )
                         feature_name = feature_id
@@ -209,15 +209,15 @@ def iter_features(
                         )
 
                 except Exception as e:
-                    logger.error(
+                    await logger.aexception(
                         f"Could not process feature {i}: {feature_type=}, {feature_raw_attributes=}; encountered "
-                        f"exception: {e}"
+                        f"exception",
+                        exc_info=e,
                     )
-                    logger.error(traceback.format_exc())
 
                 total_processed += 1
                 if total_processed % GFF_LOG_PROGRESS_INTERVAL == 0:
-                    logger.info(f"Processed {total_processed} features")
+                    await logger.ainfo(f"Processed {total_processed} features")
 
             yield tuple(contig_features_by_id.values())
 
@@ -229,7 +229,7 @@ async def ingest_features(
     gff_index_path: Path,
     # dependencies:
     db: Database,
-    logger: logging.Logger,
+    logger: BoundLogger,
 ) -> int:
     """
     Given a genome ID and a path to an external GTF gene/exon/transcript annotation file, this function copies the GTF
@@ -243,7 +243,10 @@ async def ingest_features(
     :return: None
     """
 
-    logger.info(f"Ingesting gene features for genome {genome.id}...")
+    genome_id = genome.id
+    logger = logger.bind(genome_id=genome_id)  # for all logging events in ingest_features(...)
+
+    await logger.ainfo("ingesting gene features")
 
     features_to_ingest = iter_features(genome, gff_path, gff_index_path, logger)
     n_ingested: int = 0
@@ -252,25 +255,27 @@ async def ingest_features(
     #  - these contig batches are created by the generator produced iter_features(...)
     #  - we use contigs as batches rather than a fixed batch size so that we are guaranteed to get parents alongside
     #    their child features in the same batch, so we can assign surrogate keys correctly.
-    while data := next(features_to_ingest, ()):
+    async for data in features_to_ingest:
         s = datetime.now()
-        logger.debug(f"ingest_gene_feature_annotation: ingesting batch of {len(data)} features")
+        await logger.adebug(f"ingest_gene_feature_annotation: ingesting batch of {len(data)} features")
         await db.bulk_ingest_genome_features(data)
         n_ingested += len(data)
-        logger.debug(f"ingest_gene_feature_annotation: batch took {(datetime.now() - s).total_seconds():.1f} seconds")
+        await logger.adebug(
+            f"ingest_gene_feature_annotation: batch took {(datetime.now() - s).total_seconds():.1f} seconds"
+        )
 
     if n_ingested == 0:
         raise AnnotationIngestError("No gene features could be ingested - is this a valid GFF3 file?")
 
-    logger.info(f"ingest_gene_feature_annotation: ingested {n_ingested} gene features")
+    await logger.ainfo(f"ingest_gene_feature_annotation: ingested {n_ingested} gene features")
 
     return n_ingested
 
 
 async def download_uri_into_temporary_file(
-    uri: str, tmp: Path, config: Config, drs_resolver: DrsResolver, logger: logging.Logger
+    uri: str, tmp: Path, config: Config, drs_resolver: DrsResolver, logger: BoundLogger
 ):
-    logger.debug(f"Saving data from URI {uri} into temporary file {tmp}")
+    await logger.adebug(f"Saving data from URI {uri} into temporary file {tmp}")
 
     _, _, stream_iter = await stream_from_uri(
         config, drs_resolver, logger, uri, range_header=None, impose_response_limit=False
@@ -281,11 +286,11 @@ async def download_uri_into_temporary_file(
         while data := (await anext(stream_iter, None)):
             await fh.write(data)
 
-    logger.debug(f"Wrote downloaded data to {tmp}; size={tmp.stat().st_size}")
+    await logger.adebug(f"Wrote downloaded data to {tmp}; size={tmp.stat().st_size}")
 
 
 async def download_feature_files(
-    genome: m.GenomeWithURIs, config: Config, drs_resolver: DrsResolver, logger: logging.Logger
+    genome: m.GenomeWithURIs, config: Config, drs_resolver: DrsResolver, logger: BoundLogger
 ):
     tmp_file_id = str(uuid4())
 
@@ -304,35 +309,39 @@ async def download_feature_files(
 
 
 async def ingest_features_task(
-    genome_id: str, task_id: int, config: Config, db: Database, drs_resolver: DrsResolver, logger: logging.Logger
+    genome_id: str, task_id: int, config: Config, db: Database, drs_resolver: DrsResolver, logger: BoundLogger
 ):
     # the ingest_features task moves from queued -> running -> (success | error)
+
+    # for all logging events in ingest_features_task(...), bind task_id and genome_id to the logger.
+    logger = logger.bind(genome_id=genome_id, task_id=task_id)
 
     await db.update_task_status(task_id, "running")
 
     genome: m.GenomeWithURIs | None = await db.get_genome(genome_id)
     if genome is None:
+        await logger.aerror("genome not found for task")  # binding takes care of extra data (task and genome ID)
         err = f"task {task_id}: genome with ID {genome_id} not found"
-        logger.error(err)
         await db.update_task_status(task_id, "error", message=err)
         raise AnnotationGenomeNotFoundError(err)
 
     try:
         # download GFF3 + GFF3 TBI file for this genome
-        logger.info(f"Downloading gene feature files for genome {genome_id}")
+        await logger.ainfo("task downloading gene feature files")
         gff3_gz_path, gff3_gz_tbi_path = await download_feature_files(genome, config, drs_resolver, logger)
     except Exception as e:
+        await logger.aexception("task encountered exception while downloading feature files", exc_info=e)
         err = (
             f"task {task_id}: encountered exception while downloading feature files: {e}; traceback: "
             f"{traceback.format_exc()}"
         )
-        logger.error(err)
         await db.update_task_status(task_id, "error", message=err)
         raise AnnotationIngestError(err)
 
     try:
         # clear existing gene features for this genome
-        logger.info(f"Clearing gene features for genome {genome_id} in preparation for feature (re-)ingestion")
+        #  - binding takes care of extra data for log (task and genome ID):
+        await logger.ainfo("task clearing gene features in preparation for feature ingestion")
         await db.clear_genome_features(genome_id)
 
         # ingest gene features into the database
@@ -340,10 +349,11 @@ async def ingest_features_task(
         await db.update_task_status(task_id, "success", message=f"ingested {n_ingested} features")
 
     except Exception as e:
+        # binding takes care of extra data for log (task and genome ID):
+        await logger.aexception("encountered exception while ingesting features", exc_info=e)
         err = (
             f"task {task_id}: encountered exception while ingesting features: {e}; traceback: {traceback.format_exc()}"
         )
-        logger.error(err)
         await db.update_task_status(task_id, "error", message=err)
 
     finally:

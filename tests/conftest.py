@@ -1,16 +1,19 @@
 import asyncpg
+import logging
+import os
 import pytest
 import pytest_asyncio
+import structlog.stdlib
+import structlog.testing
 
 from aioresponses import aioresponses
 from bento_lib.drs.resolver import DrsResolver
 from fastapi.testclient import TestClient
 from typing import AsyncGenerator
 
-import os
-
 os.environ["BENTO_DEBUG"] = "true"
 os.environ["BENTO_VALIDATE_SSL"] = "false"
+os.environ["BENTO_JSON_LOGS"] = "false"  # use rich text logs in testing
 os.environ["CORS_ORIGINS"] = "*"
 os.environ["BENTO_AUTHZ_SERVICE_URL"] = "https://authz.local"
 
@@ -22,6 +25,21 @@ from bento_reference_service.main import app
 
 from .shared_data import TEST_GENOME_SARS_COV_2
 from .shared_functions import create_genome_with_permissions
+
+
+@pytest.fixture(name="log_output")
+def fixture_log_output():
+    # INFO: see https://www.structlog.org/en/stable/testing.html
+    return structlog.testing.LogCapture()
+
+
+@pytest.fixture(autouse=True)
+def fixture_configure_structlog(log_output):
+    logging.getLogger("asyncio").setLevel(logging.WARN)
+    logging.getLogger("httpx").setLevel(logging.WARN)
+
+    # INFO: see https://www.structlog.org/en/stable/testing.html
+    structlog.configure(processors=[log_output])
 
 
 @pytest.fixture()

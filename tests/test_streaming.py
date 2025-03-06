@@ -1,5 +1,5 @@
-import logging
 import pytest
+import structlog
 
 from aioresponses import aioresponses
 from bento_lib.drs.resolver import DrsResolver
@@ -12,7 +12,7 @@ from .shared_data import TEST_DRS_REPLY_NO_ACCESS, TEST_DRS_REPLY
 
 HTTP_TEST_URI = "https://test.local/file.txt"
 
-logger = logging.getLogger(__name__)
+logger = structlog.stdlib.get_logger(__name__)
 
 
 @pytest.mark.asyncio()

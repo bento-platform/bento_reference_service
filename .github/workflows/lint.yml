@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install poetry
-        run: pip install poetry
+        run: pip install 'poetry<2'
       - name: Install dependencies
         run: poetry install
       - name: Format check

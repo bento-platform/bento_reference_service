@@ -47,7 +47,7 @@ def test_refget_service_info_wrong_accept(test_client: TestClient):
 
 
 def test_refget_sequence_not_found(test_client: TestClient):
-    res = test_client.get(f"/sequence/does-not-exist", headers=HEADERS_ACCEPT_PLAIN)
+    res = test_client.get("/sequence/does-not-exist", headers=HEADERS_ACCEPT_PLAIN)
     assert res.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -161,7 +161,7 @@ def test_refget_sequence_partial(test_client, sars_cov_2_genome):
 
     res = test_client.get(seq_url, headers={"Range": "bytes=10-", **HEADERS_ACCEPT_PLAIN})
     assert res.status_code == status.HTTP_206_PARTIAL_CONTENT
-    assert res.headers["Content-Range"] == f"bytes 10-{seq_len-1}/{seq_len}"
+    assert res.headers["Content-Range"] == f"bytes 10-{seq_len - 1}/{seq_len}"
     assert res.content == seq[10:]
 
     res = test_client.get(seq_url, headers={"Range": "bytes=-10", **HEADERS_ACCEPT_PLAIN})

@@ -140,7 +140,7 @@ class Database(PgAsyncDatabase):
                         )
                         SELECT jsonb_agg(contigs_tmp.*) FROM contigs_tmp
                     ) contigs
-                FROM genomes g {('WHERE ' + ' AND '.join(where_items)) if where_items else ''}
+                FROM genomes g {("WHERE " + " AND ".join(where_items)) if where_items else ""}
                 """,
                 *q_params,
             )

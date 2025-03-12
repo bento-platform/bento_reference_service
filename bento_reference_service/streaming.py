@@ -72,13 +72,13 @@ async def drs_bytes_url_from_uri(config: Config, drs_resolver: DrsResolver, logg
         await logger.aerror(str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"A Not Found error was encountered while accessing DRS record for genome",
+            detail="A Not Found error was encountered while accessing DRS record for genome",
         )
     except DrsRequestError as e:
         await logger.aerror(str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error was encountered while accessing DRS record for genome",
+            detail="An error was encountered while accessing DRS record for genome",
         )
 
     # TODO: this doesn't support access IDs / the full DRS spec

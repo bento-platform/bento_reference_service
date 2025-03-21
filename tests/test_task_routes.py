@@ -15,7 +15,7 @@ async def test_task_create_no_genome(test_client: TestClient, aioresponse: aiore
     res = test_client.post("/tasks", json={"genome_id": "DNE", "kind": "ingest_features"}, headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_400_BAD_REQUEST  # 400: no genome
     err = res.json()
-    assert err["errors"][0]["message"] == f"Genome with ID DNE not found."
+    assert err["errors"][0]["message"] == "Genome with ID DNE not found."
 
 
 @pytest.mark.asyncio()
@@ -48,5 +48,5 @@ async def test_task_routes(test_client: TestClient, aioresponse: aioresponses, d
     assert rd[0] == rd2
 
     aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
-    res = test_client.get(f"/tasks/0", headers=AUTHORIZATION_HEADER)
+    res = test_client.get("/tasks/0", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_404_NOT_FOUND

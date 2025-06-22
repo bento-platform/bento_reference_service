@@ -38,5 +38,5 @@ In a local Bento instance, this would (likely) look like `https://bentov2.local/
 
 * [The FASTA format (Wikipedia)](https://en.wikipedia.org/wiki/FASTA_format)
 * [The FAI index format](https://www.htslib.org/doc/faidx.html)
-* The GFF3 genome annotation format
+* [The GFF3 genome annotation format](https://gmod.org/wiki/GFF3)
 * [RefGet v2.0.0](http://samtools.github.io/hts-specs/refget.html)

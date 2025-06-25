@@ -10,6 +10,6 @@ The service expects that the FASTA and FAI (index) files will have already been 
 [DRS](https://github.com/bento-platform/bento_drs) or are located at a public HTTP-accessible location; these URLs are
 passed in the JSON object.
 
-Optionally, a GFF3 containing annotations, with a GFF3 TBI index, can be passed in as well. These annotations must be 
-indexed in the service before being usable; see the [Ingesting annotation data](./ingesting_annotations.md) guide for 
+Optionally, a GFF3 containing features, with a GFF3 TBI index, can be passed in as well. These features must be 
+indexed in the service before being usable; see the [Ingesting feature data](./ingesting_features.md) guide for 
 more information.

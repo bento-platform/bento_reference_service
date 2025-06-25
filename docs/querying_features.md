@@ -4,8 +4,10 @@ Genome features can be queried from the `/genomes/<genome_id>/features` endpoint
 
 A few query parameters are available for filtering/querying:
 
-* `q`: "free-text" search (`q_fzy`: whether this should be a "fuzzy" free-text search)
-* `name` (`name_fzy`: whether this should be a "fuzzy" name search)
+* `q`: partial "full-text" search (searches ID, name, and attribute values)
+  * `q_fzy`: whether this should be a "fuzzy" full-text search
+* `name`: feature name search
+  * `name_fzy`: whether this should be a "fuzzy" name search
 * `position`: feature formatted position **prefix search**, e.g., `chr1:4032` becomes a prefix query: `chr1:4032%`
 * `contig`: feature contig name, matching primary contig name of the corresponding reference genome
 * `start`: includes all features with **start position** `>=` this value

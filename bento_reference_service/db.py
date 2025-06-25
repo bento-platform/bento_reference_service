@@ -370,14 +370,13 @@ class Database(PgAsyncDatabase):
         name: str | None = None,
         name_fzy: bool = False,
         position: str | None = None,
+        contig: str | None = None,
         start: int | None = None,
         end: int | None = None,
         feature_types: list[str] | None = None,
         offset: int = 0,
         limit: int = 10,
     ) -> tuple[list[GenomeFeature], dict]:  # list of genome features + pagination dict object
-        # TODO: refactor to use standard Bento search in the future, when Bento search makes more sense
-
         gf_select_items: list[str] = []
         gf_where_items: list[str] = []
         gf_order_items: list[str] = []
@@ -392,36 +391,27 @@ class Database(PgAsyncDatabase):
             query_param = _q_param(q)
             q_op = "%" if q_fzy else "~"
             gf_where_items.append(
-                f"""
-                gf.feature_id IN (
-                    SELECT feature_id FROM (
-                        SELECT 
-                            feature_id,
-                            feature_name,
-                            feature_type
-                        FROM genome_features gf_tmp_1
-                        WHERE 
-                            gf_tmp_1.genome_id = $1 AND (
-                                gf_tmp_1.feature_id {q_op} {query_param}
-                                OR gf_tmp_1.feature_name {q_op} {query_param}
-                                OR EXISTS (
-                                    SELECT attr_val FROM genome_feature_attributes_view gfav 
-                                    WHERE gfav.feature = gf_tmp_1.id AND gfav.attr_val {q_op} {query_param}
-                                )
-                            )
-                    ) gf_tmp_2
-                )
-            """
+                f"""(
+                    gf_tmp.feature_id {q_op} {query_param}
+                    OR gf_tmp.feature_name {q_op} {query_param}
+                    OR EXISTS (
+                        SELECT attr_val FROM genome_feature_attributes_view gfav 
+                        WHERE gfav.feature = gf_tmp.id AND gfav.attr_val {q_op} {query_param}
+                    )
+                )"""
             )
 
         if name:
             param = _q_param(name)
             if name_fzy:
                 gf_select_items.append(f"similarity(gf.feature_name, {param}) gf_fn_sml")
-                gf_where_items.append(f"gf.feature_name % {param}")
+                gf_where_items.append(f"gf_tmp.feature_name % {param}")
                 gf_order_items.append("gf_fn_sml DESC")
             else:
-                gf_where_items.append(f"gf.feature_name = {param}")
+                gf_where_items.append(f"gf_tmp.feature_name = {param}")
+
+        if contig is not None:
+            gf_where_items.append(f"gf_tmp.contig_name = {_q_param(contig)}")
 
         if position:
             gfe_where_items.append(f"gfe.position_text ILIKE {_q_param(position + '%')}")
@@ -435,10 +425,10 @@ class Database(PgAsyncDatabase):
         if feature_types:
             or_items = []
             for ft in feature_types:
-                or_items.append(f"gf.feature_type = {_q_param(ft)}")
+                or_items.append(f"gf_tmp.feature_type = {_q_param(ft)}")
             gf_where_items.append(f"({' OR '.join(or_items)})")
 
-        where_clause = " AND ".join(gf_where_items) if gf_where_items else "true"
+        gf_tmp_where_clause = " AND ".join(gf_where_items) if gf_where_items else "true"
         gfe_where_clause = " AND ".join(gfe_where_items) if gfe_where_items else None
 
         id_query = f"""
@@ -450,11 +440,10 @@ class Database(PgAsyncDatabase):
                 ({self._feature_inner_entries_query(gfe_where_clause, "gf_tmp")}) entries
             FROM genome_features gf_tmp
             WHERE 
-                gf_tmp.genome_id = $1
+                gf_tmp.genome_id = $1 AND {gf_tmp_where_clause}
         ) gf
         WHERE 
-            {"jsonb_array_length(gf.entries) > 0 AND" if gfe_where_clause else ""} 
-            {where_clause}
+            {"jsonb_array_length(gf.entries) > 0 AND" if gfe_where_clause else "true"} 
         {"ORDER BY " + ", ".join(gf_order_items) if gf_order_items else ""}
         OFFSET $2 
         LIMIT  $3

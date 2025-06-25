@@ -92,6 +92,7 @@ CREATE INDEX IF NOT EXISTS genome_features_genome_idx ON genome_features (genome
 CREATE INDEX IF NOT EXISTS genome_features_feature_id_trgm_gin ON genome_features USING GIN (feature_id gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS genome_features_feature_name_trgm_gin
     ON genome_features USING GIN (feature_name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS genome_features_genome_feature_type_idx ON genome_features (genome_id, feature_type);
 CREATE INDEX IF NOT EXISTS genome_features_feature_type_idx ON genome_features (feature_type);
 CREATE INDEX IF NOT EXISTS genome_features_gene_idx ON genome_features (gene_id);
 

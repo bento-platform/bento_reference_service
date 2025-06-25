@@ -436,14 +436,11 @@ class Database(PgAsyncDatabase):
             SELECT 
                 feature_id,
                 feature_name,
-                feature_type,
                 ({self._feature_inner_entries_query(gfe_where_clause, "gf_tmp")}) entries
             FROM genome_features gf_tmp
-            WHERE 
-                gf_tmp.genome_id = $1 AND {gf_tmp_where_clause}
+            WHERE gf_tmp.genome_id = $1 AND {gf_tmp_where_clause}
         ) gf
-        WHERE 
-            {"jsonb_array_length(gf.entries) > 0 AND" if gfe_where_clause else "true"} 
+        WHERE {"jsonb_array_length(gf.entries) > 0" if gfe_where_clause else "true"} 
         {"ORDER BY " + ", ".join(gf_order_items) if gf_order_items else ""}
         OFFSET $2 
         LIMIT  $3

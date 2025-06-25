@@ -1,7 +1,6 @@
 # Ingesting annotation data
 
-Genome annotations (in the form of GFF3 files, pre-ingestion) can be loaded into the reference service via a two-step 
-process.
+Genome annotations (in the form of GFF3 files) can be loaded into the reference service via a two-step process.
 
 First, the genome record should be updated with URLs for the GFF3 file and index, via, e.g., PATCHing to 
 `/genomes/hg38` with the following body (where `hg38` is a genome ID):

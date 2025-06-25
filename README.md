@@ -1,5 +1,9 @@
 # Bento Reference Service
 
+[![Lint](https://github.com/bento-platform/bento_reference_service/actions/workflows/lint.yml/badge.svg)](https://github.com/bento-platform/bento_reference_service/actions/workflows/lint.yml)
+[![Test](https://github.com/bento-platform/bento_reference_service/actions/workflows/test.yml/badge.svg)](https://github.com/bento-platform/bento_reference_service/actions/workflows/test.yml)
+[![Build and push bento_reference_service](https://github.com/bento-platform/bento_reference_service/actions/workflows/build.yml/badge.svg)](https://github.com/bento-platform/bento_reference_service/actions/workflows/build.yml)
+
 Reference data (genomes &amp; annotations) service for the Bento platform.
 
 ## Goals

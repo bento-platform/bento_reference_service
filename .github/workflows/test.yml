@@ -31,8 +31,8 @@ jobs:
         run: |
           docker exec ${{ job.services.postgres.id }} sh -c 'echo "max_connections=200" >> /var/lib/postgresql/data/postgresql.conf'
           docker kill --signal=SIGHUP ${{ job.services.postgres.id }}
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         name: Set up Python
         with:
           python-version: ${{ matrix.python-version }}

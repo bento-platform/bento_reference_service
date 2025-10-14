@@ -63,7 +63,7 @@ task normalize_and_compress_gff3_and_index {
 
         # See http://www.htslib.org/doc/tabix.html#EXAMPLE
         #  - sort the GFF3 file
-        (grep ^"#" unsorted.gff3; grep -v ^"#" unsorted.gff3 | sort -k1,1 -k4,4n) | bgzip -@ 2 > "${out_file}"
+        (grep ^"#" unsorted.gff3; grep -v ^"#" unsorted.gff3 | sort -t$'\t' -k1,1 -k4,4n) | bgzip -@ 2 > "${out_file}"
         tabix "${out_file}"
     >>>
 

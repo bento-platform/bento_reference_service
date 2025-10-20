@@ -4,11 +4,11 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "bento_reference_service"
-requires-python = ">= 3.10,<3.14"
+requires-python = ">= 3.12,<3.14"
 
 [tool.poetry]
 name = "bento_reference_service"
-version = "0.5.1"
+version = "0.6.0"
 description = "Reference data (genomes & annotations) service for the Bento platform."
 authors = [
     "David Lougheed <david.lougheed@mail.mcgill.ca>",
@@ -28,10 +28,10 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10.0,<3.14"
-fastapi = {extras = ["all"], version = "^0.116.1"}
+python = ">=3.12.0,<3.14"
+fastapi = {extras = ["all"], version = "^0.119.0"}
 pydantic = "^2.6.1"
-bento-lib = {extras = ["fastapi"], version = "^13.6.0"}
+bento-lib = {extras = ["fastapi"], version = "^14.0.0"}
 aiofiles = "~25.1.0"
 pysam = "~0.23.3"
 jsonschema = "^4.23.0"

@@ -3,6 +3,5 @@ DO $$
 BEGIN
     ALTER TABLE genome_features
     ALTER COLUMN feature_type TYPE VARCHAR(31);
-
 END $$;
 -- End migration (v0.6)

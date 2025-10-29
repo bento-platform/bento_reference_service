@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS genome_features (
     --    however, let's not support this, since it becomes tricky and doesn't help us much for our use cases.
     feature_id VARCHAR(63) NOT NULL,  -- Feature ID from the GFF3 file, in the context of the genome
     feature_name TEXT NOT NULL,
-    feature_type VARCHAR(15) NOT NULL REFERENCES genome_feature_types,
+    feature_type VARCHAR(31) NOT NULL REFERENCES genome_feature_types,,
     source TEXT NOT NULL,
     -- extracted from attributes (especially GENCODE GFF3s) - gene context (NULL if not in a gene and not a gene):
     gene_id INTEGER REFERENCES genome_features ON DELETE CASCADE,

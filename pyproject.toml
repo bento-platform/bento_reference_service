@@ -29,26 +29,26 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.12.0,<3.14"
-fastapi = {extras = ["all"], version = "^0.119.0"}
+fastapi = {extras = ["all"], version = "^0.122.0"}
 pydantic = "^2.6.1"
-bento-lib = {extras = ["fastapi"], version = "^14.0.0"}
+bento-lib = {extras = ["fastapi"], version = "^14.0.3"}
 aiofiles = "~25.1.0"
 pysam = "~0.23.3"
 jsonschema = "^4.23.0"
 pydantic-settings = "^2.1.0"
-asyncpg = "^0.30.0"
+asyncpg = "^0.31.0"
 structlog = "^25.1.0"
 
 [tool.poetry.group.dev.dependencies]
 aioresponses = "^0.7.6"
 coverage = "^7.6.1"
-debugpy = "^1.8.1"
+debugpy = "^1.8.17"
 httpx = "^0.28.0"
-pytest = "^8.2.1"
+pytest = "^9.0.1"
 pytest-asyncio = "^1.0.0"
 pytest-cov = "^7.0.0"
 fasta-checksum-utils = "^0.5.0"
-ruff = "^0.14.0"
+ruff = "^0.14.6"
 
 [tool.ruff]
 line-length = 120

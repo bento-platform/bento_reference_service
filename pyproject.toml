@@ -8,7 +8,7 @@ requires-python = ">= 3.12,<3.14"
 
 [tool.poetry]
 name = "bento_reference_service"
-version = "0.6.0"
+version = "0.6.1"
 description = "Reference data (genomes & annotations) service for the Bento platform."
 authors = [
     "David Lougheed <david.lougheed@mail.mcgill.ca>",
@@ -29,9 +29,9 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.12.0,<3.14"
-fastapi = {extras = ["all"], version = "^0.122.0"}
+fastapi = {extras = ["all"], version = "^0.123.10"}
 pydantic = "^2.6.1"
-bento-lib = {extras = ["fastapi"], version = "^14.0.3"}
+bento-lib = {extras = ["fastapi"], version = "^14.0.4"}
 aiofiles = "~25.1.0"
 pysam = "~0.23.3"
 jsonschema = "^4.23.0"

@@ -15,7 +15,7 @@ from .models import (
     Genome,
     GenomeWithURIs,
     GenomeGFF3Patch,
-    OntologyTerm,
+    NCBITaxonOntologyClass,
     GenomeFeatureEntry,
     GenomeFeature,
     TaskStatus,
@@ -87,7 +87,7 @@ class Database(PgAsyncDatabase):
                 if rec["gff3_gz_tbi_uri"]
                 else None
             ),
-            taxon=OntologyTerm(id=rec["taxon_id"], label=rec["taxon_label"]),
+            taxon=NCBITaxonOntologyClass(id=rec["taxon_id"], label=rec["taxon_label"]),
         )
 
     async def _select_genomes(

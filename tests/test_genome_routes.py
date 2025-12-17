@@ -108,7 +108,7 @@ async def test_genome_create_taxon_validation(test_client: TestClient, aiorespon
     assert res_json == {
         "code": status.HTTP_400_BAD_REQUEST,
         "message": "Bad Request",
-        "errors": [{"message": r"body.taxon.id: String should match pattern '^NCBITaxon:[a-zA-Z0-9.\-_]+$'"}]
+        "errors": [{"message": r"body.taxon.id: String should match pattern '^NCBITaxon:[a-zA-Z0-9.\-_]+$'"}],
     }
 
 

@@ -29,6 +29,7 @@ SCHEMA_PATH = Path(__file__).parent / "sql" / "schema.sql"
 class Database(PgAsyncDatabase):
     def __init__(self, config: Config, logger: BoundLogger):
         self._config: Config = config
+        self._service_base_url = self._config.service_url_base_path.rstrip("/")
         self.logger: BoundLogger = logger
         super().__init__(config.database_uri, SCHEMA_PATH)
 
@@ -37,8 +38,7 @@ class Database(PgAsyncDatabase):
         return Alias(alias=rec["alias"], naming_authority=rec["naming_authority"])
 
     def deserialize_contig(self, rec: asyncpg.Record | dict) -> ContigWithRefgetURI:
-        service_base_url = self._config.service_url_base_path.rstrip("/")
-        refget_uri_base = f"{service_base_url}/sequence"
+        refget_uri_base = f"{self._service_base_url}/sequence"
 
         md5 = rec["md5_checksum"]
         ga4gh = rec["ga4gh_checksum"]
@@ -65,10 +65,11 @@ class Database(PgAsyncDatabase):
         )
 
     def deserialize_genome(self, rec: asyncpg.Record, external_resource_uris: bool) -> GenomeWithURIs:
-        service_base_url = self._config.service_url_base_path.rstrip("/")
-        genome_uri = f"{service_base_url}/genomes/{rec['id']}"
+        genome_id = rec["id"]
+        genome_uri = f"{self._service_base_url}/genomes/{genome_id}"
+
         return GenomeWithURIs(
-            id=rec["id"],
+            id=genome_id,
             # aliases is [None] if no aliases defined:
             aliases=tuple(map(Database.deserialize_alias, json.loads(rec["aliases"]))) if rec["aliases"] else (),
             uri=genome_uri,

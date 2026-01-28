@@ -98,6 +98,20 @@ async def test_genome_create(test_client: TestClient, aioresponse: aioresponses,
     assert len(res.json()) == 2
 
 
+async def test_genome_create_taxon_validation(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+    res = create_genome_with_permissions(
+        test_client, aioresponse, {**TEST_GENOME_SARS_COV_2, "taxon": {"id": "asdf:123", "label": "covid"}}
+    )
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    res_json = res.json()
+    del res_json["timestamp"]
+    assert res_json == {
+        "code": status.HTTP_400_BAD_REQUEST,
+        "message": "Bad Request",
+        "errors": [{"message": r"body.taxon.id: String should match pattern '^NCBITaxon:[a-zA-Z0-9.\-_]+$'"}],
+    }
+
+
 async def test_genome_detail_endpoints(test_client: TestClient, sars_cov_2_genome):
     # tests
 

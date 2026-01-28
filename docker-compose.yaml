@@ -13,7 +13,7 @@ services:
       - net_reference_db
 
   reference-db:
-    image: postgres:16
+    image: postgres:18
     volumes:
       - ./pg_data:/var/lib/postgresql/data
     networks:

@@ -1,9 +1,11 @@
+from bento_lib.ontologies.common_resources import NCBI_TAXON_2025_12_03
+from bento_lib.ontologies.models import OntologyClass, OntologyResource
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Literal
 
 __all__ = [
-    "OntologyTerm",
+    "NCBITaxonOntologyClass",
     "Alias",
     "Contig",
     "ContigWithRefgetURI",
@@ -20,9 +22,8 @@ __all__ = [
 # Pydantic/dict models, not database models
 
 
-class OntologyTerm(BaseModel):
-    id: str
-    label: str
+class NCBITaxonOntologyClass(OntologyClass):
+    id: str = Field(..., pattern=r"^NCBITaxon:[a-zA-Z0-9.\-_]+$")
 
 
 class Alias(BaseModel):
@@ -65,13 +66,14 @@ class Genome(BaseModel):
     gff3_gz_tbi: str | None = None  # URI
 
     # biological information
-    taxon: OntologyTerm  # MUST be from NCBITaxon ontology - ingestion SHOULD validate this
+    taxon: NCBITaxonOntologyClass  # MUST be from NCBITaxon ontology
     contigs: tuple[Contig, ...]
 
 
 class GenomeWithURIs(Genome):
     uri: str
     contigs: tuple[ContigWithRefgetURI, ...]
+    resources: tuple[OntologyResource, ...] = (NCBI_TAXON_2025_12_03,)  # For resolving taxon.id CURIE
 
 
 class GenomeGFF3Patch(BaseModel):

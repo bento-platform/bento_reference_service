@@ -18,6 +18,9 @@ __all__ = [
     "TEST_DRS_ID",
     "TEST_DRS_REPLY_NO_ACCESS",
     "TEST_DRS_REPLY",
+    "TEST_GENOME_SACC_I",
+    "TEST_GENOME_SACC_VI",
+    "TEST_GENOME_NC_001422_1",
 ]
 
 DATA_DIR = (pathlib.Path(__file__).parent / "data").absolute()
@@ -110,5 +113,60 @@ TEST_DRS_REPLY = {
             "type": "https",
             "access_url": {"url": "https://example.org/test.txt"},
         },
+    ],
+}
+
+
+# Refget test genomes
+
+TEST_GENOME_SACC_I = {
+    "id": "Saccharomyces_cerevisiae_I",
+    "md5": "fa5e6d09456968f920452bf32c2cf29e",
+    "ga4gh": "SQ.kEb-eApt-6ia-fa2tqLd4DfMxA-fvssQ",
+    "fasta": f"file://{DATA_DIR / 'refget_compliance' / 'I.faa'}",
+    "fai": f"file://{DATA_DIR / 'refget_compliance' / 'I.faa.fai'}",
+    "contigs": [
+        {
+            "name": "I",
+            "aliases": [],
+            "md5": "6681ac2f62509cfc220d78751b8dc524",
+            "ga4gh": "SQ.lZyxiD_ByprhOUzrR1o1bq0ezO_1gkrn",
+            "length": 230218,
+            "circular": False,
+        }
+    ],
+}
+
+TEST_GENOME_SACC_VI = {
+    "id": "Saccharomyces_cerevisiae_VI",
+    "md5": "fc5ad55647962492abd8e1580ebda55c",
+    "ga4gh": "SQ.FVXyYzLbWcuIiaDCY9v8mxFwsyE5S-UL",
+    "contigs": [
+        {
+            "name": "VI",
+            "aliases": [],
+            "md5": "b7ebc601f9a7df2e1ec5863deeae88a3",
+            "ga4gh": "SQ.z-qJgWoacRBV77zcMgZN9E_utrdzmQsH",
+            "length": 270161,
+            "circular": False,
+        }
+    ],
+}
+
+TEST_GENOME_NC_001422_1 = {
+    "id": "NC_001422.1",
+    "fasta": f"file://{DATA_DIR / 'refget_compliance' / 'NC.faa'}",
+    "fai": f"file://{DATA_DIR / 'refget_compliance' / 'NC.faa.fai'}",
+    "md5": "69a6c72e164d1a57c0f8cf375a246b0a",
+    "ga4gh": "SQ.n7fcw0wZic7Rt13Y7dVUPwsGeolLGki6",
+    "contigs": [
+        {
+            "name": "NC_001422.1",
+            "aliases": [],
+            "md5": "3332ed720ac7eaa9b3655c06f6b9e196",
+            "ga4gh": "SQ.IIXILYBQCpHdC4qpI3sOQ_HAeAm9bmeF",
+            "length": 5386,
+            "circular": True,  # circular!
+        }
     ],
 }

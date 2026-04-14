@@ -9,6 +9,7 @@ __all__ = [
     "Alias",
     "Contig",
     "ContigWithRefgetURI",
+    "ContigLink",
     "Genome",
     "GenomeWithURIs",
     "GenomeGFF3Patch",
@@ -51,6 +52,11 @@ class ContigWithRefgetURI(Contig):
     refget_uris: tuple[str, ...]
 
 
+class ContigLink(BaseModel):
+    name: str
+    href: str = Field(..., title="HREF", description="Link to service contig record")
+
+
 class Genome(BaseModel):
     id: str
     aliases: tuple[Alias, ...] = ()
@@ -70,9 +76,9 @@ class Genome(BaseModel):
     contigs: tuple[Contig, ...]
 
 
-class GenomeWithURIs(Genome):
+class GenomeWithURIs[C: ContigLink | ContigWithRefgetURI](Genome):
     uri: str
-    contigs: tuple[ContigWithRefgetURI, ...]
+    contigs: tuple[C, ...]
     resources: tuple[OntologyResource, ...] = (NCBI_TAXON_2025_12_03,)  # For resolving taxon.id CURIE
 
 

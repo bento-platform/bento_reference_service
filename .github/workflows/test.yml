@@ -45,6 +45,6 @@ jobs:
           export DATABASE_URI="postgres://postgres:postgres@localhost:5432/postgres"
           poetry run pytest -svv --cov=bento_reference_service --cov-branch
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

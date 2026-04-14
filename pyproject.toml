@@ -38,6 +38,7 @@ jsonschema = "^4.23.0"
 pydantic-settings = "^2.1.0"
 asyncpg = "^0.31.0"
 structlog = "^25.1.0"
+orjson = "^3.11.8"
 
 [tool.poetry.group.dev.dependencies]
 aioresponses = "^0.7.6"

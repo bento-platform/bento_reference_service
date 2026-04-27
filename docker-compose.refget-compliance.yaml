@@ -1,0 +1,35 @@
+# Test-only (!) compose file for the Bento reference service
+
+services:
+  reference:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+    restart: no
+    depends_on:
+      - reference-db
+    environment:
+      - DATABASE_URI=postgres://ref_user:ref_password@reference-db:5432/ref_db
+    ports:
+      - "5055:5000"
+    volumes:
+      - $PWD:/reference
+    command: /bin/bash -c '
+      cd /reference && 
+      /poetry_user_install_dev.bash && 
+      '
+  reference-db:
+    image: postgres:16
+    restart: no
+    environment:
+      - POSTGRES_USER=ref_user
+      - POSTGRES_PASSWORD=ref_password
+      - POSTGRES_DB=ref_db
+    expose:
+      - 5432
+  refget-compliance:
+    depends_on:
+      - reference
+    image: ga4gh/refget-compliance-suite:1.2.6
+    restart: no
+    command: refget-compliance report --server http://reference/ --json -

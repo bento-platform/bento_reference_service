@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import asyncpg
 import traceback
 
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from typing import Annotated
+from typing import Annotated, Literal, overload
 
 from .. import models as m
 from ..authz import authz_middleware
@@ -12,6 +14,7 @@ from ..config import ConfigDependency
 from ..db import Database, DatabaseDependency
 from ..drs import DrsResolverDependency
 from ..logger import LoggerDependency
+from ..models import ContigWithRefgetURI, ContigLink
 from ..streaming import generate_uri_streaming_response
 from .constants import DEPENDENCY_DELETE_REFERENCE_MATERIAL, DEPENDENCY_INGEST_REFERENCE_MATERIAL
 
@@ -22,10 +25,24 @@ __all__ = ["genome_router"]
 genome_router = APIRouter(prefix="/genomes")
 
 
+@overload
 async def get_genome_or_raise_404(
-    db: Database, genome_id: str, external_resource_uris: bool = True
-) -> m.GenomeWithURIs:
-    genome: m.GenomeWithURIs = await db.get_genome(genome_id, external_resource_uris=external_resource_uris)
+    db: Database, genome_id: str, external_resource_uris: bool = True, full_contigs: Literal[False] = False
+) -> m.GenomeWithURIs[m.ContigLink]: ...
+
+
+@overload
+async def get_genome_or_raise_404(
+    db: Database, genome_id: str, external_resource_uris: bool = True, full_contigs: Literal[True] = True
+) -> m.GenomeWithURIs[m.ContigWithRefgetURI]: ...
+
+
+async def get_genome_or_raise_404[C: ContigWithRefgetURI | ContigLink](
+    db: Database, genome_id: str, external_resource_uris: bool = True, full_contigs: bool = False
+) -> m.GenomeWithURIs[C]:
+    genome: m.GenomeWithURIs[C] = await db.get_genome(
+        genome_id, external_resource_uris=external_resource_uris, full_contigs=full_contigs
+    )
     if genome is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Genome with ID {genome_id} not found")
     return genome
@@ -154,14 +171,16 @@ async def genomes_delete(genome_id: str, db: DatabaseDependency):
 
 @genome_router.get("/{genome_id}/contigs", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_contigs(genome_id: str, db: DatabaseDependency) -> tuple[m.ContigWithRefgetURI, ...]:
-    return (await get_genome_or_raise_404(db, genome_id)).contigs
+    return (await get_genome_or_raise_404(db, genome_id, full_contigs=True)).contigs
 
 
 @genome_router.get("/{genome_id}/contigs/{contig_name}", dependencies=[authz_middleware.dep_public_endpoint()])
 async def genomes_detail_contig_detail(
     genome_id: str, contig_name: str, db: DatabaseDependency
 ) -> m.ContigWithRefgetURI:
-    genome: m.GenomeWithURIs = await get_genome_or_raise_404(db, genome_id)
+    # TODO: rewrite to do less DB/deserialization work
+
+    genome: m.GenomeWithURIs = await get_genome_or_raise_404(db, genome_id, full_contigs=True)
 
     contig: m.ContigWithRefgetURI | None = next((c for c in genome.contigs if c.name == contig_name), None)
     if contig is None:

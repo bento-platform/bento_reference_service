@@ -6,7 +6,7 @@ import pytest_asyncio
 import structlog.stdlib
 import structlog.testing
 
-from aioresponses import aioresponses
+from aiointercept import aiointercept
 from bento_lib.drs.resolver import DrsResolver
 from fastapi.testclient import TestClient
 from typing import AsyncGenerator
@@ -116,13 +116,13 @@ def test_client(db: Database):
         yield client
 
 
-@pytest.fixture
-def aioresponse():
-    with aioresponses() as m:
+@pytest_asyncio.fixture
+async def aio():
+    async with aiointercept(mock_external_urls=True) as m:
         yield m
 
 
 @pytest.fixture
-def sars_cov_2_genome(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
-    create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
+def sars_cov_2_genome(test_client: TestClient, aio: aiointercept, db_cleanup):
+    create_genome_with_permissions(test_client, aio, TEST_GENOME_SARS_COV_2)
     return TEST_GENOME_SARS_COV_2

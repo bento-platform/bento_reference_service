@@ -41,7 +41,7 @@ structlog = "^26.1.0"
 orjson = "^3.11.8"
 
 [tool.poetry.group.dev.dependencies]
-aioresponses = "^0.7.6"
+aiointercept = "^0.1.6"
 coverage = "^7.6.1"
 debugpy = "^1.8.17"
 httpx2 = "^2.3.0"

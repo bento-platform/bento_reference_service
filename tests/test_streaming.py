@@ -1,7 +1,7 @@
 import pytest
 import structlog
 
-from aioresponses import aioresponses
+from aiointercept import aiointercept
 from bento_lib.drs.resolver import DrsResolver
 from bento_lib.streaming import exceptions as se
 from fastapi import HTTPException, status
@@ -16,8 +16,8 @@ logger = structlog.stdlib.get_logger(__name__)
 
 
 @pytest.mark.asyncio()
-async def test_drs_bytes_url_from_uri(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
-    aioresponse.get("https://example.org/ga4gh/drs/v1/objects/abc", payload=TEST_DRS_REPLY)
+async def test_drs_bytes_url_from_uri(aio: aiointercept, config: c.Config, drs_resolver: DrsResolver):
+    aio.get("https://example.org/ga4gh/drs/v1/objects/abc", payload=TEST_DRS_REPLY)
     assert (
         await s.drs_bytes_url_from_uri(config, drs_resolver, logger, "drs://example.org/abc")
         == TEST_DRS_REPLY["access_methods"][1]["access_url"]["url"]
@@ -25,8 +25,8 @@ async def test_drs_bytes_url_from_uri(aioresponse: aioresponses, config: c.Confi
 
 
 @pytest.mark.asyncio()
-async def test_drs_bytes_url_from_uri_not_found(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
-    aioresponse.get(
+async def test_drs_bytes_url_from_uri_not_found(aio: aiointercept, config: c.Config, drs_resolver: DrsResolver):
+    aio.get(
         "https://example.org/ga4gh/drs/v1/objects/abc",
         status=status.HTTP_404_NOT_FOUND,
         payload={"message": "Not Found"},
@@ -40,8 +40,8 @@ async def test_drs_bytes_url_from_uri_not_found(aioresponse: aioresponses, confi
 
 
 @pytest.mark.asyncio()
-async def test_drs_bytes_url_from_uri_500(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
-    aioresponse.get(
+async def test_drs_bytes_url_from_uri_500(aio: aiointercept, config: c.Config, drs_resolver: DrsResolver):
+    aio.get(
         "https://example.org/ga4gh/drs/v1/objects/abc",
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         payload={"message": "Internal Server Error"},
@@ -55,8 +55,8 @@ async def test_drs_bytes_url_from_uri_500(aioresponse: aioresponses, config: c.C
 
 
 @pytest.mark.asyncio()
-async def test_drs_bytes_url_from_uri_no_access(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
-    aioresponse.get("https://example.org/ga4gh/drs/v1/objects/abc", payload=TEST_DRS_REPLY_NO_ACCESS)
+async def test_drs_bytes_url_from_uri_no_access(aio: aiointercept, config: c.Config, drs_resolver: DrsResolver):
+    aio.get("https://example.org/ga4gh/drs/v1/objects/abc", payload=TEST_DRS_REPLY_NO_ACCESS)
 
     with pytest.raises(HTTPException) as e:
         await s.drs_bytes_url_from_uri(config, drs_resolver, logger, "drs://example.org/abc")
@@ -78,8 +78,8 @@ async def test_uri_streaming_bad_scheme(config: c.Config, drs_resolver: DrsResol
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming(aioresponse: aioresponses):
-    aioresponse.get(HTTP_TEST_URI, body=b"test page")
+async def test_http_streaming(aio: aiointercept):
+    aio.get(HTTP_TEST_URI, body=b"test page")
 
     # test that we get back content as expected
     stream = s.stream_http(c.get_config(), HTTP_TEST_URI, {})
@@ -90,7 +90,7 @@ async def test_http_streaming(aioresponse: aioresponses):
         assert isinstance(chunk, bytes)
 
     # Test with content-length response
-    aioresponse.get(HTTP_TEST_URI, body=b"test page", headers={"content-length": "9"})
+    aio.get(HTTP_TEST_URI, body=b"test page", headers={"content-length": "9"})
     stream = s.stream_http(
         c.get_config(), HTTP_TEST_URI, {}, yield_status_as_first_2=True, yield_content_length_as_next_8=True
     )
@@ -100,16 +100,16 @@ async def test_http_streaming(aioresponse: aioresponses):
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming_416(aioresponse: aioresponses):
-    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE, body=b"Not Satisfiable")
+async def test_http_streaming_416(aio: aiointercept):
+    aio.get(HTTP_TEST_URI, status=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE, body=b"Not Satisfiable")
     with pytest.raises(se.StreamingRangeNotSatisfiable):
         stream = s.stream_http(c.get_config(), HTTP_TEST_URI, {"Range": "bytes=0-100000"})
         await anext(stream)
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming_no_content_length(aioresponse: aioresponses):
-    aioresponse.get(HTTP_TEST_URI, body=b"test page")  # doesn't have content-length header in response
+async def test_http_streaming_no_content_length(aio: aiointercept):
+    aio.get(HTTP_TEST_URI, body=b"test page")  # doesn't have content-length header in response
     with pytest.raises(se.StreamingProxyingError):
         stream = s.stream_http(
             c.get_config(), HTTP_TEST_URI, {"Range": "bytes=0-100000"}, yield_content_length_as_next_8=True
@@ -118,24 +118,24 @@ async def test_http_streaming_no_content_length(aioresponse: aioresponses):
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming_404_1(aioresponse: aioresponses):
-    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
+async def test_http_streaming_404_1(aio: aiointercept):
+    aio.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
     with pytest.raises(se.StreamingProxyingError):
         stream = s.stream_http(c.get_config(), HTTP_TEST_URI, {})
         await anext(stream)
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming_404_2(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
-    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
+async def test_http_streaming_404_2(aio: aiointercept, config: c.Config, drs_resolver: DrsResolver):
+    aio.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
     with pytest.raises(se.StreamingProxyingError):
         _, _, stream = await s.stream_from_uri(config, drs_resolver, logger, HTTP_TEST_URI, None, False)
         await anext(stream)
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming_404_3(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
-    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
+async def test_http_streaming_404_3(aio: aiointercept, config: c.Config, drs_resolver: DrsResolver):
+    aio.get(HTTP_TEST_URI, status=status.HTTP_404_NOT_FOUND, body=b"Not Found")
     with pytest.raises(HTTPException):
         config = c.get_config()
         res = await s.generate_uri_streaming_response(
@@ -151,8 +151,8 @@ async def test_http_streaming_404_3(aioresponse: aioresponses, config: c.Config,
 
 
 @pytest.mark.asyncio()
-async def test_http_streaming_response_limit(aioresponse: aioresponses, config: c.Config, drs_resolver: DrsResolver):
-    aioresponse.get(HTTP_TEST_URI, status=status.HTTP_200_OK, body=b"x" * 105000, headers={"content-length": "105000"})
+async def test_http_streaming_response_limit(aio: aiointercept, config: c.Config, drs_resolver: DrsResolver):
+    aio.get(HTTP_TEST_URI, status=status.HTTP_200_OK, body=b"x" * 105000, headers={"content-length": "105000"})
     with pytest.raises(se.StreamingResponseExceededLimit):
         _, _, stream = await s.stream_from_uri(config, drs_resolver, logger, HTTP_TEST_URI, None, True)
         await anext(stream)

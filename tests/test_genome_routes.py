@@ -1,6 +1,6 @@
 import pytest
 
-from aioresponses import aioresponses
+from aiointercept import aiointercept
 from fastapi import status
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -55,28 +55,28 @@ async def test_get_404s_with_no_genomes(test_client: TestClient, endpoint: str):
     assert test_client.get(endpoint).status_code == status.HTTP_404_NOT_FOUND
 
 
-def create_covid_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
-    return create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_SARS_COV_2)
+def create_covid_genome_with_permissions(test_client: TestClient, aio: aiointercept) -> Response:
+    return create_genome_with_permissions(test_client, aio, TEST_GENOME_SARS_COV_2)
 
 
-def create_hg38_subset_genome_with_permissions(test_client: TestClient, aioresponse: aioresponses) -> Response:
-    return create_genome_with_permissions(test_client, aioresponse, TEST_GENOME_HG38_CHR1_F100K)
+def create_hg38_subset_genome_with_permissions(test_client: TestClient, aio: aiointercept) -> Response:
+    return create_genome_with_permissions(test_client, aio, TEST_GENOME_HG38_CHR1_F100K)
 
 
-async def test_genome_create(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+async def test_genome_create(test_client: TestClient, aio: aiointercept, db_cleanup):
     res = test_client.post("/genomes", json=TEST_GENOME_SARS_COV_2)
     assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
     res = test_client.post("/genomes", json=TEST_GENOME_SARS_COV_2, headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_403_FORBIDDEN
 
     # SARS-CoV-2
 
-    res = create_covid_genome_with_permissions(test_client, aioresponse)
+    res = create_covid_genome_with_permissions(test_client, aio)
     assert res.status_code == status.HTTP_201_CREATED
 
-    res = create_covid_genome_with_permissions(test_client, aioresponse)  # test we cannot recreate
+    res = create_covid_genome_with_permissions(test_client, aio)  # test we cannot recreate
     assert res.status_code == status.HTTP_400_BAD_REQUEST
 
     # - test list has one entry
@@ -86,10 +86,10 @@ async def test_genome_create(test_client: TestClient, aioresponse: aioresponses,
 
     # hg38 subset
 
-    res = create_hg38_subset_genome_with_permissions(test_client, aioresponse)
+    res = create_hg38_subset_genome_with_permissions(test_client, aio)
     assert res.status_code == status.HTTP_201_CREATED
 
-    res = create_hg38_subset_genome_with_permissions(test_client, aioresponse)  # test we cannot recreate
+    res = create_hg38_subset_genome_with_permissions(test_client, aio)  # test we cannot recreate
     assert res.status_code == status.HTTP_400_BAD_REQUEST
 
     # - test list has two entries
@@ -98,9 +98,9 @@ async def test_genome_create(test_client: TestClient, aioresponse: aioresponses,
     assert len(res.json()) == 2
 
 
-async def test_genome_create_taxon_validation(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+async def test_genome_create_taxon_validation(test_client: TestClient, aio: aiointercept, db_cleanup):
     res = create_genome_with_permissions(
-        test_client, aioresponse, {**TEST_GENOME_SARS_COV_2, "taxon": {"id": "asdf:123", "label": "covid"}}
+        test_client, aio, {**TEST_GENOME_SARS_COV_2, "taxon": {"id": "asdf:123", "label": "covid"}}
     )
     assert res.status_code == status.HTTP_400_BAD_REQUEST
     res_json = res.json()
@@ -166,13 +166,13 @@ async def test_genome_detail_endpoints(test_client: TestClient, sars_cov_2_genom
         assert res.content == fh.read()
 
 
-async def test_genome_without_gff3_and_then_patch(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+async def test_genome_without_gff3_and_then_patch(test_client: TestClient, aio: aiointercept, db_cleanup):
     covid_genome_without_gff3 = {**TEST_GENOME_SARS_COV_2}
     del covid_genome_without_gff3["gff3_gz"]
     del covid_genome_without_gff3["gff3_gz_tbi"]
 
     # ingest a genome without GFF3/TBI URIs (we'll add them in later)
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.post("/genomes", json=covid_genome_without_gff3, headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_201_CREATED
 
@@ -187,7 +187,7 @@ async def test_genome_without_gff3_and_then_patch(test_client: TestClient, aiore
     assert res.status_code == status.HTTP_404_NOT_FOUND
 
     # update the genome with GFF3/TBI URIs
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.patch(
         f"/genomes/{SARS_COV_2_GENOME_ID}",
         json={
@@ -205,16 +205,16 @@ async def test_genome_without_gff3_and_then_patch(test_client: TestClient, aiore
     assert res.status_code == status.HTTP_200_OK
 
 
-async def test_genome_delete(test_client: TestClient, sars_cov_2_genome, aioresponse: aioresponses):
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+async def test_genome_delete(test_client: TestClient, sars_cov_2_genome, aio: aiointercept):
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_204_NO_CONTENT
 
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[True]]})
     res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_404_NOT_FOUND  # already deleted
 
-    res = create_covid_genome_with_permissions(test_client, aioresponse)  # test we can re-create
+    res = create_covid_genome_with_permissions(test_client, aio)  # test we can re-create
     assert res.status_code == status.HTTP_201_CREATED
 
     # test that we cannot delete with no token
@@ -222,7 +222,7 @@ async def test_genome_delete(test_client: TestClient, sars_cov_2_genome, aioresp
     assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
     # test that we cannot delete with no permission
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
     res = test_client.delete(f"/genomes/{SARS_COV_2_GENOME_ID}", headers=AUTHORIZATION_HEADER)
     assert res.status_code == status.HTTP_403_FORBIDDEN
 
@@ -268,19 +268,19 @@ def _test_ingest_genome_features(test_client: TestClient, genome: Genome, expect
     "genome,expected_features", [(TEST_GENOME_SARS_COV_2_OBJ, 49), (TEST_GENOME_HG38_CHR1_F100K_OBJ, 13)]
 )
 async def test_genome_feature_ingest(
-    test_client: TestClient, aioresponse: aioresponses, db_cleanup, genome: Genome, expected_features: int
+    test_client: TestClient, aio: aiointercept, db_cleanup, genome: Genome, expected_features: int
 ):
     # setup: create genome
-    create_genome_with_permissions(test_client, aioresponse, genome.model_dump(mode="json"))
+    create_genome_with_permissions(test_client, aio, genome.model_dump(mode="json"))
 
     # Test we cannot ingest without permissions
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[False]]})
     res = _put_genome_features(test_client, genome)
     assert res.status_code == status.HTTP_403_FORBIDDEN
 
     # Test we can ingest features
 
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
     _test_ingest_genome_features(test_client, genome, expected_features)
 
     # Test we can delete
@@ -296,15 +296,15 @@ async def test_genome_feature_ingest(
     assert res.status_code == status.HTTP_204_NO_CONTENT
 
 
-async def test_genome_feature_endpoints(test_client: TestClient, aioresponse: aioresponses, db_cleanup):
+async def test_genome_feature_endpoints(test_client: TestClient, aio: aiointercept, db_cleanup):
     genome = TEST_GENOME_SARS_COV_2_OBJ
     expected_features = 49
 
     # setup: create genome
-    create_genome_with_permissions(test_client, aioresponse, genome.model_dump(mode="json"))
+    create_genome_with_permissions(test_client, aio, genome.model_dump(mode="json"))
 
     # setup: ingest features
-    aioresponse.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
+    aio.post("https://authz.local/policy/evaluate", payload={"result": [[True]]}, repeat=True)
     _test_ingest_genome_features(test_client, genome, expected_features)
 
     # Test we can query genome features

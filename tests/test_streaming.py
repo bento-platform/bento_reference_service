@@ -101,7 +101,7 @@ async def test_http_streaming(aio: aiointercept):
 
 @pytest.mark.asyncio()
 async def test_http_streaming_416(aio: aiointercept):
-    aio.get(HTTP_TEST_URI, status=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE, body=b"Not Satisfiable")
+    aio.get(HTTP_TEST_URI, status=status.HTTP_416_RANGE_NOT_SATISFIABLE, body=b"Not Satisfiable")
     with pytest.raises(se.StreamingRangeNotSatisfiable):
         stream = s.stream_http(c.get_config(), HTTP_TEST_URI, {"Range": "bytes=0-100000"})
         await anext(stream)

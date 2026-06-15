@@ -39,7 +39,7 @@ async def stream_http(
 ) -> AsyncIterator[bytes]:
     async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
         async with session.get(url, headers=headers) as res:
-            if res.status == status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE:
+            if res.status == status.HTTP_416_RANGE_NOT_SATISFIABLE:
                 n_bytes = None
                 if (crh := res.headers.get("Content-Range")) is not None and crh.startswith("bytes */"):
                     n_bytes = int(crh.split("/")[-1])
@@ -195,7 +195,7 @@ async def generate_uri_streaming_response(
         )
     except se.StreamingRangeNotSatisfiable as e:
         raise HTTPException(
-            status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+            status_code=status.HTTP_416_RANGE_NOT_SATISFIABLE,
             headers={"Content-Range": f"bytes */{e.n_bytes}"},
         )
     except se.StreamingBadRange:

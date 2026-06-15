@@ -64,7 +64,7 @@ def test_refget_sequence_invalid_requests(test_client: TestClient, sars_cov_2_ge
 
     # cannot have start > end
     res = test_client.get(seq_url, params={"start": 5, "end": 1}, headers=HEADERS_ACCEPT_PLAIN)
-    assert res.status_code == status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE
+    assert res.status_code == status.HTTP_416_RANGE_NOT_SATISFIABLE
     assert res.content == b"Range Not Satisfiable"
 
     # start > contig length (by 1 base, since it's 0-based)
@@ -93,7 +93,7 @@ def test_refget_sequence_invalid_requests(test_client: TestClient, sars_cov_2_ge
 
     # cannot have overlaps in range header
     res = test_client.get(seq_url, headers={"Range": "bytes=0-10, 5-15", **HEADERS_ACCEPT_PLAIN})
-    assert res.status_code == status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE
+    assert res.status_code == status.HTTP_416_RANGE_NOT_SATISFIABLE
     assert res.content == b"Range Not Satisfiable"
 
 

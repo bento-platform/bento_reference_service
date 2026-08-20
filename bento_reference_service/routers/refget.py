@@ -109,7 +109,7 @@ async def refget_service_info(
 
 REFGET_BAD_REQUEST = Response(status_code=status.HTTP_400_BAD_REQUEST, content=b"Bad Request")
 REFGET_RANGE_NOT_SATISFIABLE = Response(
-    status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE, content=b"Range Not Satisfiable"
+    status_code=status.HTTP_416_RANGE_NOT_SATISFIABLE, content=b"Range Not Satisfiable"
 )
 
 

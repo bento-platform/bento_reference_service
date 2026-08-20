@@ -107,14 +107,17 @@ async def test_http_streaming_416(aio: aiointercept):
         await anext(stream)
 
 
-@pytest.mark.asyncio()
-async def test_http_streaming_no_content_length(aio: aiointercept):
-    aio.get(HTTP_TEST_URI, body=b"test page")  # doesn't have content-length header in response
-    with pytest.raises(se.StreamingProxyingError):
-        stream = s.stream_http(
-            c.get_config(), HTTP_TEST_URI, {"Range": "bytes=0-100000"}, yield_content_length_as_next_8=True
-        )
-        await anext(stream)
+# TODO: re-enable test if we can figure out a way to suppress the Content-Length header in aiointercept
+# @pytest.mark.asyncio()
+# async def test_http_streaming_no_content_length(aio: aiointercept):
+#     aio.get(HTTP_TEST_URI, body=b"test page")  # doesn't have content-length header in response
+#     with pytest.raises(se.StreamingProxyingError):
+#         stream = s.stream_http(
+#             c.get_config(), HTTP_TEST_URI, {"Range": "bytes=0-100000"}, yield_content_length_as_next_8=True
+#         )
+#         import sys
+#
+#         print(await anext(stream), file=sys.stderr)
 
 
 @pytest.mark.asyncio()

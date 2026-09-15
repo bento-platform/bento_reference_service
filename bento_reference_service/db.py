@@ -2,16 +2,17 @@ import asyncpg
 import json
 from bento_lib.db.pg_async import PgAsyncDatabase
 from fastapi import Depends
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from structlog.stdlib import BoundLogger
-from typing import Annotated, AsyncIterator, Literal
+from typing import Annotated, AsyncIterator, Literal, LiteralString
 
 from .config import Config, ConfigDependency
 from .logger import LoggerDependency
 from .models import (
     Alias,
     ContigWithRefgetURI,
+    ContigLink,
     Genome,
     GenomeWithURIs,
     GenomeGFF3Patch,
@@ -64,16 +65,27 @@ class Database(PgAsyncDatabase):
             ),
         )
 
-    def deserialize_genome(self, rec: asyncpg.Record, external_resource_uris: bool) -> GenomeWithURIs:
+    def deserialize_contig_link(self, genome_id: str, rec: asyncpg.Record | dict) -> ContigLink:
+        name: str = rec["contig_name"]
+        return ContigLink(name=name, href=f"{self._service_base_url}/genomes/{genome_id}/contigs/{name}")
+
+    def deserialize_genome(
+        self, rec: asyncpg.Record, external_resource_uris: bool, full_contigs: bool = True
+    ) -> GenomeWithURIs:
         genome_id = rec["id"]
         genome_uri = f"{self._service_base_url}/genomes/{genome_id}"
+
+        if full_contigs:
+            deserialize_contig = self.deserialize_contig
+        else:
+            deserialize_contig = partial(self.deserialize_contig_link, genome_id)
 
         return GenomeWithURIs(
             id=genome_id,
             # aliases is [None] if no aliases defined:
             aliases=tuple(map(Database.deserialize_alias, json.loads(rec["aliases"]))) if rec["aliases"] else (),
             uri=genome_uri,
-            contigs=tuple(map(self.deserialize_contig, json.loads(rec["contigs"]))),
+            contigs=tuple(map(deserialize_contig, json.loads(rec["contigs"]))),
             md5=rec["md5_checksum"],
             ga4gh=rec["ga4gh_checksum"],
             fasta=f"{genome_uri}.fa" if external_resource_uris else rec["fasta_uri"],
@@ -96,6 +108,7 @@ class Database(PgAsyncDatabase):
         g_ids: list[str] | None,
         taxon_id: str | None = None,
         external_resource_uris: bool = False,
+        full_contigs: bool = True,
     ) -> AsyncIterator[GenomeWithURIs]:
         where_items: list[str] = []
         q_params: list[str | int] = []
@@ -110,6 +123,21 @@ class Database(PgAsyncDatabase):
 
         if taxon_id:
             where_items.append(f"taxon_id = {_q_param(taxon_id)}")
+
+        contig_select_items: LiteralString = (
+            (
+                """
+            contig_name, contig_length, circular, md5_checksum, ga4gh_checksum,
+            (
+                SELECT jsonb_agg(gca.*)
+                FROM genome_contig_aliases gca
+                WHERE g.id = gca.genome_id AND gc.contig_name = gca.contig_name
+            ) aliases
+            """
+            )
+            if full_contigs
+            else "contig_name"
+        )
 
         conn: asyncpg.Connection
         async with self.connect() as conn:
@@ -130,13 +158,7 @@ class Database(PgAsyncDatabase):
                     ) aliases,
                     (
                         WITH contigs_tmp AS (
-                            SELECT
-                                contig_name, contig_length, circular, md5_checksum, ga4gh_checksum,
-                                (
-                                    SELECT jsonb_agg(gca.*)
-                                    FROM genome_contig_aliases gca
-                                    WHERE g.id = gca.genome_id AND gc.contig_name = gca.contig_name
-                                ) aliases
+                            SELECT {contig_select_items}
                             FROM genome_contigs gc WHERE g.id = gc.genome_id
                         )
                         SELECT jsonb_agg(contigs_tmp.*) FROM contigs_tmp
@@ -146,16 +168,22 @@ class Database(PgAsyncDatabase):
                 *q_params,
             )
 
-        for r in map(lambda g: self.deserialize_genome(g, external_resource_uris), res):
+        for r in map(lambda g: self.deserialize_genome(g, external_resource_uris, full_contigs), res):
             yield r
 
     async def get_genomes(
         self, g_ids: list[str] | None = None, taxon_id: str | None = None, external_resource_uris: bool = False
     ) -> tuple[GenomeWithURIs, ...]:
-        return tuple([r async for r in self._select_genomes(g_ids, taxon_id, external_resource_uris)])
+        return tuple(
+            [r async for r in self._select_genomes(g_ids, taxon_id, external_resource_uris, full_contigs=False)]
+        )
 
-    async def get_genome(self, g_id: str, *, external_resource_uris: bool = False) -> GenomeWithURIs | None:
-        return await anext(self._select_genomes([g_id], external_resource_uris=external_resource_uris), None)
+    async def get_genome(
+        self, g_id: str, *, external_resource_uris: bool = False, full_contigs: bool = False
+    ) -> GenomeWithURIs | None:
+        return await anext(
+            self._select_genomes([g_id], external_resource_uris=external_resource_uris, full_contigs=full_contigs), None
+        )
 
     async def delete_genome(self, g_id: str) -> None:
         conn: asyncpg.Connection

@@ -1,4 +1,5 @@
 import pathlib
+
 from bento_reference_service.models import Genome
 
 __all__ = [

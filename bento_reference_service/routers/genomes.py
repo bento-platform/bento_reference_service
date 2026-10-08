@@ -1,10 +1,10 @@
-import asyncpg
 import traceback
+from datetime import UTC, datetime
+from typing import Annotated
 
-from datetime import datetime
+import asyncpg
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from typing import Annotated
 
 from .. import models as m
 from ..authz import authz_middleware
@@ -14,7 +14,6 @@ from ..drs import DrsResolverDependency
 from ..logger import LoggerDependency
 from ..streaming import generate_uri_streaming_response
 from .constants import DEPENDENCY_DELETE_REFERENCE_MATERIAL, DEPENDENCY_INGEST_REFERENCE_MATERIAL
-
 
 __all__ = ["genome_router"]
 
@@ -196,7 +195,7 @@ async def genomes_detail_features(
 ):
     await get_genome_or_raise_404(db, genome_id)
 
-    st = datetime.now()
+    st = datetime.now(UTC)
 
     results, pagination = await db.query_genome_features(
         genome_id, q, q_fzy, name, name_fzy, position, contig, start, end, feature_type, offset, limit
@@ -205,7 +204,7 @@ async def genomes_detail_features(
     return {
         "results": results,
         "pagination": pagination,
-        "time": (datetime.now() - st).total_seconds(),
+        "time": (datetime.now(UTC) - st).total_seconds(),
     }
 
 

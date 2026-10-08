@@ -1,14 +1,14 @@
-import aiofiles
-import pysam
 import traceback
-
-from bento_lib.drs.resolver import DrsResolver
-from datetime import datetime
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from pathlib import Path
-from structlog.stdlib import BoundLogger
-from typing import AsyncIterator
 from urllib.parse import unquote as url_unquote
 from uuid import uuid4
+
+import aiofiles
+import pysam
+from bento_lib.drs.resolver import DrsResolver
+from structlog.stdlib import BoundLogger
 
 from . import models as m
 from .config import Config
@@ -208,7 +208,7 @@ async def iter_features(
                             parents=tuple(p for p in record_attributes.get(GFF_PARENT_ATTR, ()) if p),
                         )
 
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     await logger.aexception(
                         f"Could not process feature {i}: {feature_type=}, {feature_raw_attributes=}; encountered "
                         f"exception",
@@ -256,12 +256,12 @@ async def ingest_features(
     #  - we use contigs as batches rather than a fixed batch size so that we are guaranteed to get parents alongside
     #    their child features in the same batch, so we can assign surrogate keys correctly.
     async for data in features_to_ingest:
-        s = datetime.now()
+        s = datetime.now(UTC)
         await logger.adebug(f"ingest_gene_feature_annotation: ingesting batch of {len(data)} features")
         await db.bulk_ingest_genome_features(data)
         n_ingested += len(data)
         await logger.adebug(
-            f"ingest_gene_feature_annotation: batch took {(datetime.now() - s).total_seconds():.1f} seconds"
+            f"ingest_gene_feature_annotation: batch took {(datetime.now(UTC) - s).total_seconds():.1f} seconds"
         )
 
     if n_ingested == 0:
@@ -329,7 +329,7 @@ async def ingest_features_task(
         # download GFF3 + GFF3 TBI file for this genome
         await logger.ainfo("task downloading gene feature files")
         gff3_gz_path, gff3_gz_tbi_path = await download_feature_files(genome, config, drs_resolver, logger)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         await logger.aexception("task encountered exception while downloading feature files", exc_info=e)
         err = (
             f"task {task_id}: encountered exception while downloading feature files: {e}; traceback: "
@@ -348,7 +348,7 @@ async def ingest_features_task(
         n_ingested = await ingest_features(genome, gff3_gz_path, gff3_gz_tbi_path, db, logger)
         await db.update_task_status(task_id, "success", message=f"ingested {n_ingested} features")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         # binding takes care of extra data for log (task and genome ID):
         await logger.aexception("encountered exception while ingesting features", exc_info=e)
         err = (

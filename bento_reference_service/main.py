@@ -1,5 +1,6 @@
-from bento_lib.apps.fastapi import BentoFastAPI
 from contextlib import asynccontextmanager
+
+from bento_lib.apps.fastapi import BentoFastAPI
 from fastapi import FastAPI
 
 from . import __version__
@@ -12,7 +13,6 @@ from .routers.genomes import genome_router
 from .routers.refget import refget_router
 from .routers.tasks import task_router
 from .routers.workflows import workflow_router
-
 
 BENTO_SERVICE_INFO = {
     "serviceKind": BENTO_SERVICE_KIND,

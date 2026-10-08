@@ -1,5 +1,5 @@
+import aiofiles
 import pytest
-
 from aiointercept import aiointercept
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -8,16 +8,16 @@ from httpx import Response
 from bento_reference_service.models import Genome
 
 from .shared_data import (
-    SARS_COV_2_GENOME_ID,
-    SARS_COV_2_FASTA_PATH,
+    AUTHORIZATION_HEADER,
     SARS_COV_2_FAI_PATH,
+    SARS_COV_2_FASTA_PATH,
+    SARS_COV_2_GENOME_ID,
     SARS_COV_2_GFF3_GZ_PATH,
     SARS_COV_2_GFF3_GZ_TBI_PATH,
-    TEST_GENOME_SARS_COV_2,
-    TEST_GENOME_SARS_COV_2_OBJ,
     TEST_GENOME_HG38_CHR1_F100K,
     TEST_GENOME_HG38_CHR1_F100K_OBJ,
-    AUTHORIZATION_HEADER,
+    TEST_GENOME_SARS_COV_2,
+    TEST_GENOME_SARS_COV_2_OBJ,
 )
 from .shared_functions import create_genome_with_permissions
 
@@ -131,8 +131,8 @@ async def test_genome_detail_endpoints(test_client: TestClient, sars_cov_2_genom
     res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}.fa")
     assert res.status_code == status.HTTP_200_OK
     assert res.headers.get("Content-Type") == "text/x-fasta; charset=utf-8"
-    with open(SARS_COV_2_FASTA_PATH, "rb") as fh:
-        assert res.content == fh.read()
+    async with aiofiles.open(SARS_COV_2_FASTA_PATH, "rb") as fh:
+        assert res.content == await fh.read()
 
     #  - FASTA range header
     res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}.fa", headers={"Range": "bytes=0-0"})
@@ -144,8 +144,8 @@ async def test_genome_detail_endpoints(test_client: TestClient, sars_cov_2_genom
     res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}.fa.fai")
     assert res.status_code == status.HTTP_200_OK
     assert res.headers.get("Content-Type") == "text/plain; charset=utf-8"
-    with open(SARS_COV_2_FAI_PATH, "rb") as fh:
-        assert res.content == fh.read()
+    async with aiofiles.open(SARS_COV_2_FAI_PATH, "rb") as fh:
+        assert res.content == await fh.read()
 
     # - FAI range header
     res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}.fa.fai", headers={"Range": "bytes=0-0"})
@@ -156,14 +156,14 @@ async def test_genome_detail_endpoints(test_client: TestClient, sars_cov_2_genom
     # - Feature GFF3
     res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz")
     assert res.status_code == status.HTTP_200_OK
-    with open(SARS_COV_2_GFF3_GZ_PATH, "rb") as fh:
-        assert res.content == fh.read()
+    async with aiofiles.open(SARS_COV_2_GFF3_GZ_PATH, "rb") as fh:
+        assert res.content == await fh.read()
 
     # - Feature GFF3 TBI
     res = test_client.get(f"/genomes/{SARS_COV_2_GENOME_ID}/features.gff3.gz.tbi")
     assert res.status_code == status.HTTP_200_OK
-    with open(SARS_COV_2_GFF3_GZ_TBI_PATH, "rb") as fh:
-        assert res.content == fh.read()
+    async with aiofiles.open(SARS_COV_2_GFF3_GZ_TBI_PATH, "rb") as fh:
+        assert res.content == await fh.read()
 
 
 async def test_genome_without_gff3_and_then_patch(test_client: TestClient, aio: aiointercept, db_cleanup):

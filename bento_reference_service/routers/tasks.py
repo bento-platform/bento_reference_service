@@ -5,7 +5,7 @@ from ..db import DatabaseDependency
 from ..drs import DrsResolverDependency
 from ..features import ingest_features_task
 from ..logger import LoggerDependency
-from ..models import TaskParams, Task
+from ..models import Task, TaskParams
 from .constants import DEPENDENCY_INGEST_REFERENCE_MATERIAL
 
 __all__ = ["task_router"]

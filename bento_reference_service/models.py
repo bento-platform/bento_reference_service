@@ -1,8 +1,9 @@
+from datetime import datetime
+from typing import Literal
+
 from bento_lib.ontologies.common_resources import NCBI_TAXON_2025_12_03
 from bento_lib.ontologies.models import OntologyClass, OntologyResource
-from datetime import datetime
 from pydantic import BaseModel, Field
-from typing import Literal
 
 __all__ = [
     "NCBITaxonOntologyClass",

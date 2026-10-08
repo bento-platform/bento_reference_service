@@ -1,9 +1,11 @@
+import json
+import pathlib
+from collections.abc import AsyncIterator
+from urllib.parse import urlparse
+
 import aiofiles
 import aiofiles.os
 import aiohttp
-import json
-import pathlib
-
 from bento_lib.drs.exceptions import DrsRecordNotFound, DrsRequestError
 from bento_lib.drs.resolver import DrsResolver
 from bento_lib.streaming import exceptions as se
@@ -12,8 +14,6 @@ from bento_lib.streaming.range import parse_range_header
 from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 from structlog.stdlib import BoundLogger
-from typing import AsyncIterator
-from urllib.parse import urlparse
 
 from bento_reference_service.config import Config
 
@@ -37,30 +37,30 @@ async def stream_http(
     yield_status_as_first_2: bool = False,
     yield_content_length_as_next_8: bool = False,
 ) -> AsyncIterator[bytes]:
-    async with aiohttp.ClientSession(connector=tcp_connector(config)) as session:
-        async with session.get(url, headers=headers) as res:
-            if res.status == status.HTTP_416_RANGE_NOT_SATISFIABLE:
-                n_bytes = None
-                if (crh := res.headers.get("Content-Range")) is not None and crh.startswith("bytes */"):
-                    n_bytes = int(crh.split("/")[-1])
-                raise se.StreamingRangeNotSatisfiable(
-                    f"Range not satisfiable while streaming {url}", "proxied", n_bytes
-                )
+    async with (
+        aiohttp.ClientSession(connector=tcp_connector(config)) as session,
+        session.get(url, headers=headers) as res,
+    ):
+        if res.status == status.HTTP_416_RANGE_NOT_SATISFIABLE:
+            n_bytes = None
+            if (crh := res.headers.get("Content-Range")) is not None and crh.startswith("bytes */"):
+                n_bytes = int(crh.split("/")[-1])
+            raise se.StreamingRangeNotSatisfiable(f"Range not satisfiable while streaming {url}", "proxied", n_bytes)
 
-            elif res.status > 299:
-                err_content = (await res.content.read()).decode("utf-8")
-                raise se.StreamingProxyingError(f"Error while streaming {url}: {res.status} {err_content}")
+        elif res.status > 299:
+            err_content = (await res.content.read()).decode("utf-8")
+            raise se.StreamingProxyingError(f"Error while streaming {url}: {res.status} {err_content}")
 
-            if yield_status_as_first_2:
-                yield res.status.to_bytes(2, "big")
+        if yield_status_as_first_2:
+            yield res.status.to_bytes(2, "big")
 
-            if yield_content_length_as_next_8:
-                if "Content-Length" not in res.headers:
-                    raise se.StreamingProxyingError(f"Error while streaming {url}: missing Content-Length header")
-                yield int(res.headers["Content-Length"]).to_bytes(8, "big")
+        if yield_content_length_as_next_8:
+            if "Content-Length" not in res.headers:
+                raise se.StreamingProxyingError(f"Error while streaming {url}: missing Content-Length header")
+            yield int(res.headers["Content-Length"]).to_bytes(8, "big")
 
-            async for chunk in res.content.iter_chunked(config.file_response_chunk_size):
-                yield chunk
+        async for chunk in res.content.iter_chunked(config.file_response_chunk_size):
+            yield chunk
 
 
 async def drs_bytes_url_from_uri(config: Config, drs_resolver: DrsResolver, logger: BoundLogger, drs_uri: str) -> str:
@@ -202,7 +202,7 @@ async def generate_uri_streaming_response(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid range header value: {range_header}"
         )
-    except se.StreamingProxyingError as e:  #
+    except se.StreamingProxyingError as e:
         await logger.aerror(f"Encountered streaming error for {uri}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     except se.StreamingUnsupportedURIScheme as e:  # Unsupported URI scheme

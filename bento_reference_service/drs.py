@@ -1,7 +1,8 @@
-from bento_lib.drs.resolver import DrsResolver
-from fastapi import Depends
 from functools import lru_cache
 from typing import Annotated
+
+from bento_lib.drs.resolver import DrsResolver
+from fastapi import Depends
 
 from .config import ConfigDependency
 

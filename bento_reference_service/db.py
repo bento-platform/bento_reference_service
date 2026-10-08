@@ -1,11 +1,13 @@
-import asyncpg
 import json
-from bento_lib.db.pg_async import PgAsyncDatabase
-from fastapi import Depends
+from collections.abc import AsyncIterator
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated, Literal
+
+import asyncpg
+from bento_lib.db.pg_async import PgAsyncDatabase
+from fastapi import Depends
 from structlog.stdlib import BoundLogger
-from typing import Annotated, AsyncIterator, Literal
 
 from .config import Config, ConfigDependency
 from .logger import LoggerDependency
@@ -13,15 +15,14 @@ from .models import (
     Alias,
     ContigWithRefgetURI,
     Genome,
-    GenomeWithURIs,
-    GenomeGFF3Patch,
-    NCBITaxonOntologyClass,
-    GenomeFeatureEntry,
     GenomeFeature,
-    TaskStatus,
+    GenomeFeatureEntry,
+    GenomeGFF3Patch,
+    GenomeWithURIs,
+    NCBITaxonOntologyClass,
     Task,
+    TaskStatus,
 )
-
 
 SCHEMA_PATH = Path(__file__).parent / "sql" / "schema.sql"
 
@@ -146,7 +147,7 @@ class Database(PgAsyncDatabase):
                 *q_params,
             )
 
-        for r in map(lambda g: self.deserialize_genome(g, external_resource_uris), res):
+        for r in (self.deserialize_genome(g, external_resource_uris) for g in res):
             yield r
 
     async def get_genomes(
@@ -193,11 +194,10 @@ class Database(PgAsyncDatabase):
 
     async def create_genome(self, g: Genome, return_external_resource_uris: bool) -> GenomeWithURIs | None:
         conn: asyncpg.Connection
-        async with self.connect() as conn:
-            async with conn.transaction():
-                # Create the genome record:
-                await conn.execute(
-                    """
+        async with self.connect() as conn, conn.transaction():
+            # Create the genome record:
+            await conn.execute(
+                """
                     INSERT INTO genomes (
                         id, 
                         md5_checksum, 
@@ -211,47 +211,45 @@ class Database(PgAsyncDatabase):
                     )
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     """,
-                    g.id,
-                    g.md5,
-                    g.ga4gh,
-                    g.fasta,
-                    g.fai,
-                    g.gff3_gz,
-                    g.gff3_gz_tbi,
-                    g.taxon.id,
-                    g.taxon.label,
-                )
+                g.id,
+                g.md5,
+                g.ga4gh,
+                g.fasta,
+                g.fai,
+                g.gff3_gz,
+                g.gff3_gz_tbi,
+                g.taxon.id,
+                g.taxon.label,
+            )
 
-                # Create records for each genome alias:
-                if g.aliases:
-                    await conn.executemany(
-                        "INSERT INTO genome_aliases (genome_id, alias, naming_authority) VALUES ($1, $2, $3)",
-                        tuple((g.id, alias.alias, alias.naming_authority) for alias in g.aliases),
-                    )
-
-                # Create records for each genome contig and all contig aliases:
-                contig_tuples = []
-                contig_alias_tuples = []
-                for contig in g.contigs:
-                    contig_tuples.append((g.id, contig.name, contig.length, contig.circular, contig.md5, contig.ga4gh))
-                    for contig_alias in contig.aliases:
-                        contig_alias_tuples.append(
-                            (g.id, contig.name, contig_alias.alias, contig_alias.naming_authority)
-                        )
-
+            # Create records for each genome alias:
+            if g.aliases:
                 await conn.executemany(
-                    "INSERT INTO genome_contigs "
-                    "   (genome_id, contig_name, contig_length, circular, md5_checksum, ga4gh_checksum)"
-                    "   VALUES ($1, $2, $3, $4, $5, $6)",
-                    contig_tuples,
+                    "INSERT INTO genome_aliases (genome_id, alias, naming_authority) VALUES ($1, $2, $3)",
+                    tuple((g.id, alias.alias, alias.naming_authority) for alias in g.aliases),
                 )
 
-                if contig_alias_tuples:
-                    await conn.executemany(
-                        "INSERT INTO genome_contig_aliases (genome_id, contig_name, alias, naming_authority) "
-                        "VALUES ($1, $2, $3, $4)",
-                        contig_alias_tuples,
-                    )
+            # Create records for each genome contig and all contig aliases:
+            contig_tuples = []
+            contig_alias_tuples = []
+            for contig in g.contigs:
+                contig_tuples.append((g.id, contig.name, contig.length, contig.circular, contig.md5, contig.ga4gh))
+                for contig_alias in contig.aliases:
+                    contig_alias_tuples.append((g.id, contig.name, contig_alias.alias, contig_alias.naming_authority))
+
+            await conn.executemany(
+                "INSERT INTO genome_contigs "
+                "   (genome_id, contig_name, contig_length, circular, md5_checksum, ga4gh_checksum)"
+                "   VALUES ($1, $2, $3, $4, $5, $6)",
+                contig_tuples,
+            )
+
+            if contig_alias_tuples:
+                await conn.executemany(
+                    "INSERT INTO genome_contig_aliases (genome_id, contig_name, alias, naming_authority) "
+                    "VALUES ($1, $2, $3, $4)",
+                    contig_alias_tuples,
+                )
 
         await self.logger.adebug(f"Created genome: {g}")
 
@@ -483,195 +481,184 @@ class Database(PgAsyncDatabase):
         # This requires an exclusive write lock on the database, so we don't get conflicting IDs
 
         conn: asyncpg.Connection
-        async with self.connect() as conn:
-            async with conn.transaction():
-                fr = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_features")
-                kr = await conn.fetchrow(
-                    "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_keys"
-                )
-                vr = await conn.fetchrow(
-                    "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_values"
-                )
+        async with self.connect() as conn, conn.transaction():
+            fr = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_features")
+            kr = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_keys")
+            vr = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_values")
 
-                assert fr
-                assert kr
-                assert vr
+            assert fr
+            assert kr
+            assert vr
 
-                # We generate a numeric ID for features to save space and improve lookup time.;
-                current_feature_row_id: int = fr["next_id"]
-                current_attr_key_id: int = kr["next_id"]
-                current_attr_value_id: int = vr["next_id"]
+            # We generate a numeric ID for features to save space and improve lookup time.;
+            current_feature_row_id: int = fr["next_id"]
+            current_attr_key_id: int = kr["next_id"]
+            current_attr_value_id: int = vr["next_id"]
 
-                feature_row_ids: dict[str, int] = {}
-                attr_key_ids: dict[str, int] = {t[1]: t[0] for t in await self.get_genome_feature_attribute_keys(conn)}
-                new_attr_key_ids: dict[str, int] = {}
-                attr_value_ids: dict[str, int] = {
-                    t[1]: t[0] for t in await self.get_genome_feature_attribute_values(conn)
-                }
-                new_attr_value_ids: dict[str, int] = {}
+            feature_row_ids: dict[str, int] = {}
+            attr_key_ids: dict[str, int] = {t[1]: t[0] for t in await self.get_genome_feature_attribute_keys(conn)}
+            new_attr_key_ids: dict[str, int] = {}
+            attr_value_ids: dict[str, int] = {t[1]: t[0] for t in await self.get_genome_feature_attribute_values(conn)}
+            new_attr_value_ids: dict[str, int] = {}
 
-                # ------------------------------------------------------------------------------------------------------
+            # ------------------------------------------------------------------------------------------------------
 
-                feature_types: set[tuple[str]] = set()
-                entries: list[tuple[int, int, int, str, float | None, int | None]] = []
-                attributes: list[tuple[int, int, int]] = []
-                parents: list[tuple[int, int]] = []
-                feature_tuples: list[tuple[int, str, str, str, str, str, str, str, str | None]] = []
+            feature_types: set[tuple[str]] = set()
+            entries: list[tuple[int, int, int, str, float | None, int | None]] = []
+            attributes: list[tuple[int, int, int]] = []
+            parents: list[tuple[int, int]] = []
+            feature_tuples: list[tuple[int, str, str, str, str, str, str, str, str | None]] = []
 
-                for f in features:  # iter 1: populate row ID lookup dict
-                    feature_row_ids[f.feature_id] = current_feature_row_id
-                    current_feature_row_id += 1
+            for f in features:  # iter 1: populate row ID lookup dict
+                feature_row_ids[f.feature_id] = current_feature_row_id
+                current_feature_row_id += 1
 
-                for feature in features:
-                    feature_id = feature.feature_id
+            for feature in features:
+                feature_id = feature.feature_id
 
-                    row_id = feature_row_ids[feature_id]
-                    genome_id = feature.genome_id
-                    contig_name = feature.contig_name
+                row_id = feature_row_ids[feature_id]
+                genome_id = feature.genome_id
+                contig_name = feature.contig_name
 
-                    feature_types.add((feature.feature_type,))
+                feature_types.add((feature.feature_type,))
 
-                    e: GenomeFeatureEntry
-                    entries.extend(
-                        (
-                            row_id,
-                            e.start_pos,
-                            e.end_pos,
-                            f"{contig_name}:{e.start_pos}-{e.end_pos}",
-                            e.score,
-                            e.phase,
-                        )
-                        for e in feature.entries
+                entries.extend(
+                    (
+                        row_id,
+                        e.start_pos,
+                        e.end_pos,
+                        f"{contig_name}:{e.start_pos}-{e.end_pos}",
+                        e.score,
+                        e.phase,
                     )
+                    for e in feature.entries
+                )
 
-                    # to reduce attribute storage, we deduplicate storage of keys and values by giving them integer IDs,
-                    # and put these in the attributes table. we also have to put the key/value lookups into their
-                    # respective tables.
-                    for attr_key, attr_vals in feature.attributes.items():
-                        if attr_key in attr_key_ids:
-                            ak = attr_key_ids[attr_key]
-                        elif attr_key in new_attr_key_ids:
-                            ak = new_attr_key_ids[attr_key]
+                # to reduce attribute storage, we deduplicate storage of keys and values by giving them integer IDs,
+                # and put these in the attributes table. we also have to put the key/value lookups into their
+                # respective tables.
+                for attr_key, attr_vals in feature.attributes.items():
+                    if attr_key in attr_key_ids:
+                        ak = attr_key_ids[attr_key]
+                    elif attr_key in new_attr_key_ids:
+                        ak = new_attr_key_ids[attr_key]
+                    else:
+                        ak = current_attr_key_id
+                        new_attr_key_ids[attr_key] = current_attr_key_id
+                        current_attr_key_id += 1
+
+                    for attr_val in attr_vals:
+                        if attr_val in attr_value_ids:
+                            av = attr_value_ids[attr_val]
+                        elif attr_val in new_attr_value_ids:
+                            av = new_attr_value_ids[attr_val]
                         else:
-                            ak = current_attr_key_id
-                            new_attr_key_ids[attr_key] = current_attr_key_id
-                            current_attr_key_id += 1
+                            av = current_attr_value_id
+                            new_attr_value_ids[attr_val] = current_attr_value_id
+                            current_attr_value_id += 1
 
-                        for attr_val in attr_vals:
-                            if attr_val in attr_value_ids:
-                                av = attr_value_ids[attr_val]
-                            elif attr_val in new_attr_value_ids:
-                                av = new_attr_value_ids[attr_val]
-                            else:
-                                av = current_attr_value_id
-                                new_attr_value_ids[attr_val] = current_attr_value_id
-                                current_attr_value_id += 1
+                        attributes.append((row_id, ak, av))
 
-                            attributes.append((row_id, ak, av))
+                for p in feature.parents:
+                    try:
+                        parents.append((row_id, feature_row_ids[p]))
+                    except KeyError:
+                        await self.logger.aerror(f"Could not find parent row ID '{p}' for feature {feature.feature_id}")
+                        raise
 
-                    for p in feature.parents:
-                        try:
-                            parents.append((row_id, feature_row_ids[p]))
-                        except KeyError as e:
-                            await self.logger.aerror(
-                                f"Could not find parent row ID '{p}' for feature {feature.feature_id}"
-                            )
-                            raise e
-
-                    feature_tuples.append(
-                        (
-                            row_id,
-                            genome_id,
-                            contig_name,
-                            feature.strand,
-                            feature_id,
-                            feature.feature_name,
-                            feature.feature_type,
-                            feature.source,
-                            feature_row_ids.get(feature.gene_id) if feature.gene_id else None,
-                        )
+                feature_tuples.append(
+                    (
+                        row_id,
+                        genome_id,
+                        contig_name,
+                        feature.strand,
+                        feature_id,
+                        feature.feature_name,
+                        feature.feature_type,
+                        feature.source,
+                        feature_row_ids.get(feature.gene_id) if feature.gene_id else None,
                     )
-
-                await self.logger.adebug(
-                    f"bulk_ingest_genome_features: have {len(feature_types)} feature types for batch "
-                    f"({[ft[0] for ft in feature_types][:20]})"
-                )
-                await conn.executemany(
-                    "INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING", feature_types
                 )
 
-                await self.logger.adebug(f"bulk_ingest_genome_features: have {len(feature_tuples)} features for batch")
-                await conn.copy_records_to_table(
-                    "genome_features",
-                    columns=[
-                        "id",
-                        "genome_id",
-                        "contig_name",
-                        "strand",
-                        "feature_id",
-                        "feature_name",
-                        "feature_type",
-                        "source",
-                        "gene_id",
-                    ],
-                    records=feature_tuples,
-                )
+            await self.logger.adebug(
+                f"bulk_ingest_genome_features: have {len(feature_types)} feature types for batch "
+                f"({[ft[0] for ft in feature_types][:20]})"
+            )
+            await conn.executemany(
+                "INSERT INTO genome_feature_types(type_id) VALUES ($1) ON CONFLICT DO NOTHING", feature_types
+            )
 
-                new_attribute_keys: list[tuple[int, str]] = [(ik, sk) for sk, ik in new_attr_key_ids.items()]
-                await self.logger.adebug(
-                    f"bulk_ingest_genome_features: have {len(new_attribute_keys)} new feature attribute keys for batch"
-                )
-                await conn.copy_records_to_table(
-                    "genome_feature_attribute_keys", columns=["id", "attr_key"], records=new_attribute_keys
-                )
+            await self.logger.adebug(f"bulk_ingest_genome_features: have {len(feature_tuples)} features for batch")
+            await conn.copy_records_to_table(
+                "genome_features",
+                columns=[
+                    "id",
+                    "genome_id",
+                    "contig_name",
+                    "strand",
+                    "feature_id",
+                    "feature_name",
+                    "feature_type",
+                    "source",
+                    "gene_id",
+                ],
+                records=feature_tuples,
+            )
 
-                new_attribute_values: list[tuple[int, str]] = [(iv, sv) for sv, iv in new_attr_value_ids.items()]
-                await self.logger.adebug(
-                    f"bulk_ingest_genome_features: have {len(new_attribute_values)} new feature attribute values for "
-                    f"batch"
-                )
-                await conn.copy_records_to_table(
-                    "genome_feature_attribute_values", columns=["id", "attr_val"], records=new_attribute_values
-                )
+            new_attribute_keys: list[tuple[int, str]] = [(ik, sk) for sk, ik in new_attr_key_ids.items()]
+            await self.logger.adebug(
+                f"bulk_ingest_genome_features: have {len(new_attribute_keys)} new feature attribute keys for batch"
+            )
+            await conn.copy_records_to_table(
+                "genome_feature_attribute_keys", columns=["id", "attr_key"], records=new_attribute_keys
+            )
 
-                await self.logger.adebug(
-                    f"bulk_ingest_genome_features: have {len(attributes)} feature attribute records for batch"
-                )
-                await conn.copy_records_to_table(
-                    "genome_feature_attributes",
-                    columns=[
-                        "feature",
-                        "attr_key",
-                        "attr_val",
-                    ],
-                    records=attributes,
-                )
+            new_attribute_values: list[tuple[int, str]] = [(iv, sv) for sv, iv in new_attr_value_ids.items()]
+            await self.logger.adebug(
+                f"bulk_ingest_genome_features: have {len(new_attribute_values)} new feature attribute values for batch"
+            )
+            await conn.copy_records_to_table(
+                "genome_feature_attribute_values", columns=["id", "attr_val"], records=new_attribute_values
+            )
 
-                await self.logger.adebug(f"bulk_ingest_genome_features: have {len(entries)} feature entries for batch")
-                await conn.copy_records_to_table(
-                    "genome_feature_entries",
-                    columns=[
-                        "feature",
-                        "start_pos",
-                        "end_pos",
-                        "position_text",
-                        "score",
-                        "phase",
-                    ],
-                    records=entries,
-                )
+            await self.logger.adebug(
+                f"bulk_ingest_genome_features: have {len(attributes)} feature attribute records for batch"
+            )
+            await conn.copy_records_to_table(
+                "genome_feature_attributes",
+                columns=[
+                    "feature",
+                    "attr_key",
+                    "attr_val",
+                ],
+                records=attributes,
+            )
 
-                await self.logger.adebug(
-                    f"bulk_ingest_genome_features: have {len(parents)} feature parent records for batch"
-                )
-                await conn.copy_records_to_table(
-                    "genome_feature_parents",
-                    columns=[
-                        "feature",
-                        "parent",
-                    ],
-                    records=parents,
-                )
+            await self.logger.adebug(f"bulk_ingest_genome_features: have {len(entries)} feature entries for batch")
+            await conn.copy_records_to_table(
+                "genome_feature_entries",
+                columns=[
+                    "feature",
+                    "start_pos",
+                    "end_pos",
+                    "position_text",
+                    "score",
+                    "phase",
+                ],
+                records=entries,
+            )
+
+            await self.logger.adebug(
+                f"bulk_ingest_genome_features: have {len(parents)} feature parent records for batch"
+            )
+            await conn.copy_records_to_table(
+                "genome_feature_parents",
+                columns=[
+                    "feature",
+                    "parent",
+                ],
+                records=parents,
+            )
 
     @staticmethod
     def deserialize_task(rec: asyncpg.Record | dict) -> Task:
@@ -742,7 +729,7 @@ class Database(PgAsyncDatabase):
             await conn.execute(update_q, "running")
 
 
-@lru_cache()
+@lru_cache
 def get_db(config: ConfigDependency, logger: LoggerDependency) -> Database:  # pragma: no cover
     return Database(config, logger)
 

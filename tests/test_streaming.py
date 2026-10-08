@@ -1,14 +1,14 @@
 import pytest
 import structlog
-
 from aiointercept import aiointercept
 from bento_lib.drs.resolver import DrsResolver
 from bento_lib.streaming import exceptions as se
 from fastapi import HTTPException, status
 
-from bento_reference_service import config as c, streaming as s
+from bento_reference_service import config as c
+from bento_reference_service import streaming as s
 
-from .shared_data import TEST_DRS_REPLY_NO_ACCESS, TEST_DRS_REPLY
+from .shared_data import TEST_DRS_REPLY, TEST_DRS_REPLY_NO_ACCESS
 
 HTTP_TEST_URI = "https://test.local/file.txt"
 

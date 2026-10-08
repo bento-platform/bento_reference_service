@@ -1,18 +1,20 @@
 import io
 import math
-import orjson
 import re
 import typing
+from typing import Literal
 
-from bento_lib.service_info.helpers import build_service_type, build_service_info_from_pydantic_config
+import orjson
+from bento_lib.service_info.helpers import build_service_info_from_pydantic_config, build_service_type
 from bento_lib.service_info.types import GA4GHServiceInfo
-from bento_lib.streaming import exceptions as se, range as sr
+from bento_lib.streaming import exceptions as se
+from bento_lib.streaming import range as sr
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Literal
 
-from .. import models, streaming as s, __version__
+from .. import __version__, models
+from .. import streaming as s
 from ..authz import authz_middleware
 from ..config import ConfigDependency
 from ..db import DatabaseDependency
@@ -20,7 +22,6 @@ from ..drs import DrsResolverDependency
 from ..fai import parse_fai
 from ..logger import LoggerDependency
 from ..models import Alias
-
 
 __all__ = [
     "refget_router",
@@ -70,11 +71,11 @@ def check_accept_header(accept_header: str | None, mode: Literal["text", "json"]
     )
 
     if not accept_header:  # None or blank
-        return None  # valid - everything accepted
+        return  # valid - everything accepted
 
     for accept in ACCEPT_SPLIT.split(accept_header):
         if accept.split(";")[0] in valid_header_values:
-            return None  # valid - don't raise
+            return  # valid - don't raise
 
     # If none of the accept header values matched, we need to raise Not Acceptable
     raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Not Acceptable")
@@ -231,11 +232,11 @@ async def refget_sequence(
     #  - since FASTAs can have newlines, we need to account for the difference between bytes requested + the bases we
     #    return
 
-    fai_n_bases, fai_byte_offset, fai_bases_per_line, fai_bytes_per_line_with_newlines = contig_fai
+    _fai_n_bases, fai_byte_offset, fai_bases_per_line, fai_bytes_per_line_with_newlines = contig_fai
 
     newline_bytes_per_line = fai_bytes_per_line_with_newlines - fai_bases_per_line
-    n_newline_bytes_before_start = int(math.floor(start_final / fai_bases_per_line)) * newline_bytes_per_line
-    n_newline_bytes_before_end = int(math.floor(end_final_inclusive / fai_bases_per_line)) * newline_bytes_per_line
+    n_newline_bytes_before_start = math.floor(start_final / fai_bases_per_line) * newline_bytes_per_line
+    n_newline_bytes_before_end = math.floor(end_final_inclusive / fai_bases_per_line) * newline_bytes_per_line
 
     fasta_start_byte = fai_byte_offset + start_final + n_newline_bytes_before_start
     fasta_end_byte = fai_byte_offset + end_final_inclusive + n_newline_bytes_before_end

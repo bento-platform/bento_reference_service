@@ -1,15 +1,15 @@
-import asyncpg
 import logging
 import os
+from collections.abc import AsyncGenerator
+
+import asyncpg
 import pytest
 import pytest_asyncio
 import structlog.stdlib
 import structlog.testing
-
 from aiointercept import aiointercept
 from bento_lib.drs.resolver import DrsResolver
 from fastapi.testclient import TestClient
-from typing import AsyncGenerator
 
 os.environ["BENTO_DEBUG"] = "true"
 os.environ["BENTO_VALIDATE_SSL"] = "false"
@@ -35,8 +35,8 @@ def fixture_log_output():
 
 @pytest.fixture(autouse=True)
 def fixture_configure_structlog(log_output):
-    logging.getLogger("asyncio").setLevel(logging.WARN)
-    logging.getLogger("httpx").setLevel(logging.WARN)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     # INFO: see https://www.structlog.org/en/stable/testing.html
     structlog.configure(processors=[log_output])

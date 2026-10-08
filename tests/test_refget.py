@@ -1,10 +1,8 @@
 import pysam
-
 from fastapi import status
 from fastapi.testclient import TestClient
 
 from .shared_data import SARS_COV_2_FASTA_PATH
-
 
 REFGET_2_0_0_TYPE = {"group": "org.ga4gh", "artifact": "refget", "version": "2.0.0"}
 

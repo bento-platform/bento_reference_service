@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from bento_reference_service.db import Database
 
-from .shared_data import SARS_COV_2_GENOME_ID, TEST_GENOME_SARS_COV_2, AUTHORIZATION_HEADER
+from .shared_data import AUTHORIZATION_HEADER, SARS_COV_2_GENOME_ID, TEST_GENOME_SARS_COV_2
 from .shared_functions import create_genome_with_permissions
 
 

@@ -1,9 +1,8 @@
 import pytest
-from typing import Type
 
 from bento_reference_service.fai import parse_fai
 
-from .shared_data import SARS_COV_2_FAI_PATH, HG38_CHR1_F100K_FAI_PATH
+from .shared_data import HG38_CHR1_F100K_FAI_PATH, SARS_COV_2_FAI_PATH
 
 INVALID_FAI_1 = b"chr1\tabc\t87\t60\t61\n"
 INVALID_FAI_2 = b"chr1\t29903\t87\t60\t61\t42\n"
@@ -18,6 +17,6 @@ def test_valid_fai_parsing():
 
 
 @pytest.mark.parametrize("invalid_fai,exc", [(INVALID_FAI_1, ValueError), (INVALID_FAI_2, ValueError)])
-def test_invalid_fai_parsing(invalid_fai: bytes, exc: Type[Exception]):
+def test_invalid_fai_parsing(invalid_fai: bytes, exc: type[Exception]):
     with pytest.raises(exc):
         parse_fai(invalid_fai)

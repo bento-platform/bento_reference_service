@@ -1,10 +1,11 @@
-from bento_lib.config.pydantic import BentoFastAPIBaseConfig
-from fastapi import Depends
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from .constants import SERVICE_GROUP, SERVICE_ARTIFACT
+from bento_lib.config.pydantic import BentoFastAPIBaseConfig
+from fastapi import Depends
+
+from .constants import SERVICE_ARTIFACT, SERVICE_GROUP
 
 __all__ = [
     "Config",
@@ -30,7 +31,7 @@ class Config(BentoFastAPIBaseConfig):
     drs_cache_ttl: float = 900.0
 
 
-@lru_cache()
+@lru_cache
 def get_config():
     return Config()
 

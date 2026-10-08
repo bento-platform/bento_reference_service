@@ -235,9 +235,7 @@ class Database(PgAsyncDatabase):
             for contig in g.contigs:
                 contig_tuples.append((g.id, contig.name, contig.length, contig.circular, contig.md5, contig.ga4gh))
                 for contig_alias in contig.aliases:
-                    contig_alias_tuples.append(
-                        (g.id, contig.name, contig_alias.alias, contig_alias.naming_authority)
-                    )
+                    contig_alias_tuples.append((g.id, contig.name, contig_alias.alias, contig_alias.naming_authority))
 
             await conn.executemany(
                 "INSERT INTO genome_contigs "
@@ -485,12 +483,8 @@ class Database(PgAsyncDatabase):
         conn: asyncpg.Connection
         async with self.connect() as conn, conn.transaction():
             fr = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_features")
-            kr = await conn.fetchrow(
-                "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_keys"
-            )
-            vr = await conn.fetchrow(
-                "SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_values"
-            )
+            kr = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_keys")
+            vr = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM genome_feature_attribute_values")
 
             assert fr
             assert kr
@@ -504,9 +498,7 @@ class Database(PgAsyncDatabase):
             feature_row_ids: dict[str, int] = {}
             attr_key_ids: dict[str, int] = {t[1]: t[0] for t in await self.get_genome_feature_attribute_keys(conn)}
             new_attr_key_ids: dict[str, int] = {}
-            attr_value_ids: dict[str, int] = {
-                t[1]: t[0] for t in await self.get_genome_feature_attribute_values(conn)
-            }
+            attr_value_ids: dict[str, int] = {t[1]: t[0] for t in await self.get_genome_feature_attribute_values(conn)}
             new_attr_value_ids: dict[str, int] = {}
 
             # ------------------------------------------------------------------------------------------------------
@@ -571,9 +563,7 @@ class Database(PgAsyncDatabase):
                     try:
                         parents.append((row_id, feature_row_ids[p]))
                     except KeyError:
-                        await self.logger.aerror(
-                            f"Could not find parent row ID '{p}' for feature {feature.feature_id}"
-                        )
+                        await self.logger.aerror(f"Could not find parent row ID '{p}' for feature {feature.feature_id}")
                         raise
 
                 feature_tuples.append(
@@ -625,8 +615,7 @@ class Database(PgAsyncDatabase):
 
             new_attribute_values: list[tuple[int, str]] = [(iv, sv) for sv, iv in new_attr_value_ids.items()]
             await self.logger.adebug(
-                f"bulk_ingest_genome_features: have {len(new_attribute_values)} new feature attribute values for "
-                f"batch"
+                f"bulk_ingest_genome_features: have {len(new_attribute_values)} new feature attribute values for batch"
             )
             await conn.copy_records_to_table(
                 "genome_feature_attribute_values", columns=["id", "attr_val"], records=new_attribute_values

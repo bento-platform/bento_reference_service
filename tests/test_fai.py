@@ -1,4 +1,3 @@
-
 import pytest
 
 from bento_reference_service.fai import parse_fai

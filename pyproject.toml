@@ -48,7 +48,7 @@ httpx2 = "^2.3.0"
 pytest = "^9.0.1"
 pytest-asyncio = "^1.0.0"
 pytest-cov = "^7.0.0"
-fasta-checksum-utils = "^0.5.2"
+fasta-checksum-utils = "^0.6.0"
 ruff = "^0.17.2"
 
 [tool.ruff]
